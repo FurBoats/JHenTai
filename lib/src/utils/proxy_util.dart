@@ -53,6 +53,9 @@ Future<String Function(Uri)> findProxySettingFunc(ValueGetter<String> systemProx
         return 'SOCKS4 ${configProxyAddress()}; DIRECT';
       case JProxyType.direct:
         return 'DIRECT';
+      case JProxyType.xray:
+        // Embedded Xray core main inbound (see XrayService.mainAddress).
+        return 'SOCKS5 127.0.0.1:28780; DIRECT';
     }
   };
 }

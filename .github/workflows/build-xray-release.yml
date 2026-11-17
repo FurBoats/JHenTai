@@ -1,0 +1,137 @@
+name: Build Xray Release (Android)
+
+# Builds only the Android APKs of the xray-dual-node fork and publishes them
+# as a GitHub Release. Triggered by pushing an `xray-*` tag (the daily
+# sync-upstream workflow creates those) or manually via workflow_dispatch.
+
+on:
+  push:
+    tags:
+      - 'xray-*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (empty = xray-manual-<date>)'
+        required: false
+        default: ''
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  BuildAndroid:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      FLUTTER_VERSION: 3.44.8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+          cache: gradle
+
+      # Same keystore secrets as the upstream build_publish workflow. When
+      # they are not configured, fall back to an ephemeral CI keystore so the
+      # release build is still signed and installable (with a throwaway key).
+      - name: Setup Android keystore
+        env:
+          ENCODED_KEYSTORE: ${{ secrets.ENCODED_KEYSTORE }}
+          KEY_PROPERTIES: ${{ secrets.KEY_PROPERTIES }}
+        run: |
+          if [ -n "$ENCODED_KEYSTORE" ]; then
+            echo "$ENCODED_KEYSTORE" | base64 -di > android/app/upload-keystore.jks
+            echo "$KEY_PROPERTIES" > android/key.properties
+          else
+            echo "No keystore secrets configured, generating an ephemeral CI keystore"
+            keytool -genkeypair -v \
+              -keystore android/app/upload-keystore.jks \
+              -alias upload -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass android -keypass android \
+              -dname "CN=JHenTai Xray CI, OU=CI, O=FurBoats, L=NA, ST=NA, C=US"
+            printf 'storePassword=android\nkeyPassword=android\nkeyAlias=upload\nstoreFile=upload-keystore.jks\n' > android/key.properties
+          fi
+
+      - name: Setup JHenTai API secret
+        env:
+          JH_API_SECRET_CONFIG: ${{ secrets.JH_API_SECRET_CONFIG }}
+        run: |
+          if [ -n "$JH_API_SECRET_CONFIG" ]; then
+            echo "$JH_API_SECRET_CONFIG" > lib/src/config/jh_api_secret_config.dart
+          fi
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'master'
+          cache: true
+
+      - name: Flutter version
+        run: flutter --version
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      # The embedded Xray core AAR (52MB) is not committed to git. Download
+      # the exact LibXray release the fork is developed against and verify
+      # both the zip and the extracted AAR by sha256.
+      - name: Download LibXray AAR
+        env:
+          LIBXRAY_VERSION: v26.10.31
+          LIBXRAY_ZIP_SHA256: fb99f04acf379cc2957c1e1d0ce2b3c0005d3f49974a44c09a11242a0562c1ca
+          LIBXRAY_AAR_SHA256: 4c90532f61ff8363e7fcf52e064ff1aa66d065e06afbadc0ea4c6acf384c452f
+        run: |
+          curl -sSL -o /tmp/libxray-android.zip \
+            "https://github.com/XTLS/LibXray/releases/download/${LIBXRAY_VERSION}/libxray-android.zip"
+          echo "${LIBXRAY_ZIP_SHA256}  /tmp/libxray-android.zip" | sha256sum -c -
+          mkdir -p android/app/libs
+          unzip -o -j /tmp/libxray-android.zip 'libxray-android/libXray.aar' -d android/app/libs
+          echo "${LIBXRAY_AAR_SHA256}  android/app/libs/libXray.aar" | sha256sum -c -
+
+      - name: Get app version
+        id: get_version
+        shell: bash
+        run: |
+          echo "version=$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2 | cut -d '+' -f 1)" >> $GITHUB_OUTPUT
+
+      - name: Build Android APKs
+        run: |
+          flutter build apk -t lib/src/main.dart --release --split-per-abi
+          cd build/app/outputs/apk/release
+          mv app-arm64-v8a-release.apk JHenTai-${{ steps.get_version.outputs.version }}-xray-arm64-v8a.apk
+          mv app-armeabi-v7a-release.apk JHenTai-${{ steps.get_version.outputs.version }}-xray-armeabi-v7a.apk
+          mv app-x86_64-release.apk JHenTai-${{ steps.get_version.outputs.version }}-xray-x86_64.apk
+
+      - name: Resolve release tag
+        id: release_tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            TAG="${{ inputs.tag }}"
+            if [ -z "$TAG" ]; then
+              TAG="xray-manual-$(date -u +%Y%m%d-%H%M)"
+            fi
+            echo "tag=$TAG" >> $GITHUB_OUTPUT
+            # action-gh-release needs an existing tag for a non-default target;
+            # create and push it at this commit when missing.
+            if ! git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; then
+              git tag "$TAG"
+              git push origin "refs/tags/$TAG"
+            fi
+          fi
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_tag.outputs.tag }}
+          name: ${{ steps.release_tag.outputs.tag }}
+          files: build/app/outputs/apk/release/JHenTai-*.apk

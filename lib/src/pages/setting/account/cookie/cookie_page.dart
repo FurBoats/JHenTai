@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:clipboard/clipboard.dart';
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get_rx/get_rx.dart';
@@ -191,6 +192,23 @@ class _CookiePageState extends State<CookiePage> {
       connectTimeout: Duration(milliseconds: networkSetting.connectTimeout.value),
       receiveTimeout: Duration(milliseconds: networkSetting.receiveTimeout.value),
     ));
+
+    /// This Dio refreshes the igneous cookie, so in xray mode its traffic is
+    /// pinned to the igneous node's inbound (127.0.0.1:28781) with no DIRECT
+    /// fallback. In every other mode the client is left untouched and keeps
+    /// using the global proxy override, exactly as before.
+    _dio!.httpClientAdapter = IOHttpClientAdapter(
+      createHttpClient: () {
+        HttpClient client = HttpClient();
+        client.badCertificateCallback = (_, String host, __) {
+          return networkSetting.allIPs.contains(host);
+        };
+        if (networkSetting.proxyType.value == JProxyType.xray) {
+          client.findProxy = (_) => 'SOCKS5 127.0.0.1:28781';
+        }
+        return client;
+      },
+    );
 
     EHIpProvider _ehIpProvider = RoundRobinIpProvider(NetworkSetting.host2IPs);
 

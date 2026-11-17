@@ -125,4 +125,5 @@ class NetworkSetting with JHLifeCircleBeanWithConfigStorage implements JHLifeCir
   }
 }
 
-enum JProxyType { system, http, socks5, socks4, direct }
+/// New values must only be appended at the end: the index is persisted.
+enum JProxyType { system, http, socks5, socks4, direct, xray }

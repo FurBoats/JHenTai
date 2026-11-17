@@ -3,7 +3,9 @@ import 'package:get/get.dart';
 import 'package:jhentai/src/extension/widget_extension.dart';
 import 'package:jhentai/src/utils/toast_util.dart';
 
+import '../../../../routes/routes.dart';
 import '../../../../setting/network_setting.dart';
+import '../../../../utils/route_util.dart';
 
 class SettingProxyPage extends StatefulWidget {
   const SettingProxyPage({Key? key}) : super(key: key);
@@ -39,6 +41,7 @@ class _SettingProxyPageState extends State<SettingProxyPage> {
           padding: const EdgeInsets.only(top: 16),
           children: [
             _buildProxyType(),
+            if (networkSetting.proxyType.value == JProxyType.xray) _buildXrayNodes(),
             _buildProxyAddress(),
             _buildProxyUsername(),
             _buildProxyPassword(),
@@ -61,6 +64,7 @@ class _SettingProxyPageState extends State<SettingProxyPage> {
             DropdownMenuItem(child: Text('socks5Proxy'.tr), value: JProxyType.socks5),
             DropdownMenuItem(child: Text('socks4Proxy'.tr), value: JProxyType.socks4),
             DropdownMenuItem(child: Text('directProxy'.tr), value: JProxyType.direct),
+            DropdownMenuItem(child: Text('xray'.tr), value: JProxyType.xray),
           ],
           onChanged: (JProxyType? value) {
             proxyType = value!;
@@ -81,10 +85,10 @@ class _SettingProxyPageState extends State<SettingProxyPage> {
           decoration: const InputDecoration(isDense: true, labelStyle: TextStyle(fontSize: 12)),
           textAlign: TextAlign.center,
           onChanged: (String value) => proxyAddress = value,
-          enabled: networkSetting.proxyType.value != JProxyType.system && networkSetting.proxyType.value != JProxyType.direct,
+          enabled: networkSetting.proxyType.value != JProxyType.system && networkSetting.proxyType.value != JProxyType.direct && networkSetting.proxyType.value != JProxyType.xray,
         ),
       ),
-      enabled: networkSetting.proxyType.value != JProxyType.system && networkSetting.proxyType.value != JProxyType.direct,
+      enabled: networkSetting.proxyType.value != JProxyType.system && networkSetting.proxyType.value != JProxyType.direct && networkSetting.proxyType.value != JProxyType.xray,
     );
   }
 
@@ -98,10 +102,10 @@ class _SettingProxyPageState extends State<SettingProxyPage> {
           decoration: const InputDecoration(isDense: true, labelStyle: TextStyle(fontSize: 12)),
           textAlign: TextAlign.center,
           onChanged: (String value) => proxyUsername = value,
-          enabled: networkSetting.proxyType.value != JProxyType.system && networkSetting.proxyType.value != JProxyType.direct,
+          enabled: networkSetting.proxyType.value != JProxyType.system && networkSetting.proxyType.value != JProxyType.direct && networkSetting.proxyType.value != JProxyType.xray,
         ),
       ),
-      enabled: networkSetting.proxyType.value != JProxyType.system && networkSetting.proxyType.value != JProxyType.direct,
+      enabled: networkSetting.proxyType.value != JProxyType.system && networkSetting.proxyType.value != JProxyType.direct && networkSetting.proxyType.value != JProxyType.xray,
     );
   }
 
@@ -116,10 +120,18 @@ class _SettingProxyPageState extends State<SettingProxyPage> {
           textAlign: TextAlign.center,
           onChanged: (String value) => proxyPassword = value,
           obscureText: true,
-          enabled: networkSetting.proxyType.value != JProxyType.system && networkSetting.proxyType.value != JProxyType.direct,
+          enabled: networkSetting.proxyType.value != JProxyType.system && networkSetting.proxyType.value != JProxyType.direct && networkSetting.proxyType.value != JProxyType.xray,
         ),
       ),
-      enabled: networkSetting.proxyType.value != JProxyType.system && networkSetting.proxyType.value != JProxyType.direct,
+      enabled: networkSetting.proxyType.value != JProxyType.system && networkSetting.proxyType.value != JProxyType.direct && networkSetting.proxyType.value != JProxyType.xray,
+    );
+  }
+
+  Widget _buildXrayNodes() {
+    return ListTile(
+      title: Text('xrayNodes'.tr),
+      trailing: const Icon(Icons.keyboard_arrow_right).marginOnly(right: 4),
+      onTap: () => toRoute(Routes.xrayNodes),
     );
   }
 }

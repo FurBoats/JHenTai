@@ -1,0 +1,74 @@
+name: Sync Upstream
+
+# Daily sync with the upstream JHenTai repository. When upstream/master has
+# new commits, merge them into this fork's master, push, and cut an `xray-*`
+# tag, which triggers build-xray-release.yml to rebuild and publish APKs.
+#
+# NOTE: pushing the merge commit to master also triggers the upstream
+# build_publish.yml workflow (it runs on every master push). That is a known
+# side effect and is handled outside this workflow (the workflow gets
+# disabled via the GitHub API); it is intentionally not addressed here.
+#
+# Merge conflicts are NOT resolved automatically: the job fails and a human
+# has to merge by hand.
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  Sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: master
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/jiangtian616/JHenTai.git
+          git fetch upstream master
+
+      - name: Check for upstream changes
+        id: check
+        run: |
+          if git merge-base --is-ancestor upstream/master HEAD; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "No new upstream commits, nothing to do."
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Upstream has new commits:"
+            git log --oneline HEAD..upstream/master | head -20
+          fi
+
+      - name: Merge upstream and push
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          git merge upstream/master -m "Merge upstream JHenTai master"
+          git push origin master
+
+      - name: Tag xray release
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2 | cut -d '+' -f 1)
+          BASE="xray-v${VERSION}-$(date -u +%Y%m%d)"
+          TAG="$BASE"
+          N=2
+          while git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; do
+            TAG="${BASE}-${N}"
+            N=$((N + 1))
+          done
+          echo "Tagging $TAG"
+          git tag "$TAG"
+          git push origin "refs/tags/$TAG"

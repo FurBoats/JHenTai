@@ -266,6 +266,12 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
           type: ProxyType.direct,
           address: '',
         );
+      case JProxyType.xray:
+        // Embedded Xray core main inbound (see XrayService.mainAddress).
+        return ProxyConfig(
+          type: ProxyType.socks5,
+          address: '127.0.0.1:28780',
+        );
     }
   }
 

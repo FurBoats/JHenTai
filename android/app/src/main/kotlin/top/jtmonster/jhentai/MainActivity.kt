@@ -12,13 +12,56 @@ import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.EventChannel.EventSink
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugins.GeneratedPluginRegistrant
+import java.util.concurrent.Executors
 
 class MainActivity : FlutterFragmentActivity() {
     private var interceptVolumeEvent = false
     private lateinit var volumeMethodChannel: MethodChannel
+    private lateinit var xrayMethodChannel: MethodChannel
+    private val xrayExecutor = Executors.newSingleThreadExecutor()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         GeneratedPluginRegistrant.registerWith(flutterEngine)
+
+        xrayMethodChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "top.jtmonster.jhentai.xray"
+        )
+        xrayMethodChannel.setMethodCallHandler { call, result ->
+            // libXray invoke calls are blocking JNI into Go: run them on a
+            // background thread and post the result back to the main thread.
+            xrayExecutor.execute {
+                val knownMethods = setOf("start", "stop", "isRunning", "version", "convertLinks", "decodeSubscription")
+                if (call.method !in knownMethods) {
+                    mainHandler.post { result.notImplemented() }
+                    return@execute
+                }
+                try {
+                    val value: Any? = when (call.method) {
+                        "start" -> {
+                            XrayBridge.start(
+                                call.argument<String>("mainLink"),
+                                call.argument<String>("igneousLink")
+                            )
+                            null
+                        }
+                        "stop" -> {
+                            XrayBridge.stop()
+                            null
+                        }
+                        "isRunning" -> XrayBridge.isRunning()
+                        "version" -> XrayBridge.version()
+                        "convertLinks" -> XrayBridge.convertLinks(call.arguments as? String ?: "")
+                        "decodeSubscription" -> XrayBridge.decodeSubscriptionText(call.arguments as? String ?: "")
+                        else -> null
+                    }
+                    mainHandler.post { result.success(value) }
+                } catch (e: Exception) {
+                    mainHandler.post { result.error("XRAY_ERROR", e.message, null) }
+                }
+            }
+        }
 
         volumeMethodChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -70,6 +113,8 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun onDestroy() {
         volumeMethodChannel.setMethodCallHandler(null)
+        xrayMethodChannel.setMethodCallHandler(null)
+        xrayExecutor.shutdown()
         super.onDestroy()
     }
 }

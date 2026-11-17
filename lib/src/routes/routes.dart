@@ -31,6 +31,7 @@ import 'package:jhentai/src/pages/setting/advanced/frame_rate/setting_frame_rate
 import 'package:jhentai/src/pages/setting/read/tap_zone/setting_tap_zone_page.dart';
 import 'package:jhentai/src/pages/setting/mousewheel/setting_mouse_wheel_page.dart';
 import 'package:jhentai/src/pages/setting/network/proxy/setting_proxy_page.dart';
+import 'package:jhentai/src/pages/setting/network/xray/xray_page.dart';
 import 'package:jhentai/src/pages/setting/network/setting_network_page.dart';
 import 'package:jhentai/src/pages/setting/performance/setting_performace_page.dart';
 import 'package:jhentai/src/pages/setting/preference/block_rule/blocking_rule_page.dart';
@@ -122,6 +123,7 @@ class Routes {
 
   static const String hostMapping = "/setting_network/hostMapping";
   static const String proxy = "/setting_network/proxy";
+  static const String xrayNodes = "/setting_network/proxy/xrayNodes";
 
   static const String extraGalleryScanPath = "/setting_download/extraGalleryScanPath";
   static const String archiveBotSettings = '/setting/download/archive_bot';
@@ -406,6 +408,12 @@ class Routes {
     EHPage(
       name: proxy,
       page: () => const SettingProxyPage().withEscOrFifthButton2BackRightRoute(),
+      transition: defaultTransition,
+      offAllBefore: false,
+    ),
+    EHPage(
+      name: xrayNodes,
+      page: () => const XrayPage().withEscOrFifthButton2BackRightRoute(),
       transition: defaultTransition,
       offAllBefore: false,
     ),

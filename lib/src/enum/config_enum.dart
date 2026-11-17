@@ -14,6 +14,7 @@ enum ConfigEnum {
   EHSetting('EHSetting'),
   mouseSetting('mouseSetting'),
   networkSetting('networkSetting'),
+  xraySetting('xraySetting'),
   performanceSetting('performanceSetting'),
   preferenceSetting('preferenceSetting'),
   readSetting('readSetting'),

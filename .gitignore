@@ -47,3 +47,8 @@ app.*.map.json
 
 /lib/src/firebase_options.dart
 /assets/sentry_dsn
+
+# Embedded Xray core AAR (52MB) is not committed: CI downloads it from the
+# XTLS/LibXray v26.10.31 release (see build-xray-release.yml). For local
+# builds, place libXray.aar here manually before building.
+android/app/libs/libXray.aar
