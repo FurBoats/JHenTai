@@ -47,6 +47,14 @@ User device feedback round: 7 issues.
 
 Verify: flutter pub get OK; flutter analyze on all v2 changed/new files: **0 errors**. Remaining warnings are pre-existing (l18n equal_keys_in_map for upstream `quickSearch` duplicate — confirmed present in HEAD; eh_request unreachable_switch_default — v1-confirmed). No local flutter build (sandbox Gradle daemon loopback issue, same as v1); Kotlin changes are code-reviewed only, CI builds.
 
+## v3 (2026-11-17, on top of 62b41b7)
+
+User device feedback: subscription import reports "no nodes" even though the subscription URL returns content. Root cause found in LibXray source: `DecodeSubscriptionText` only decrypts Age-armored bodies and passes everything else through unchanged — it does **not** base64-decode. The bridge's convertLinks relied on it for base64 bodies, so a base64 subscription (the user's panel returns one base64 blob per line, each encoding a single link) yielded zero `://` lines and zero failures, surfacing as "no nodes in subscription".
+
+Fix (XrayBridge.kt only): convertLinks now normalizes the body via `extractShareLinkText` — plain link lists pass through untouched; Age bodies still go to libXray's decodeSubscriptionText; base64 is decoded locally with android.util.Base64 (minSdk 24 rules out java.util.Base64): whole-body first (standard/url-safe, padding optional, whitespace ignored), then per-line (each line independently encoded), then per-line again on a whole-body result. Non-UTF-8 decode results are rejected via the replacement-char check so random base64-looking garbage cannot turn into phantom links.
+
+Verify: the decoding algorithm was ported 1:1 to Python and passes 7 cases (per-line base64 of link+CRLF — the user's format — per-line bare, per-line no-padding, whole-body, whole-body url-safe/no-padding/76-wrapped, plain passthrough, garbage rejected). The three link archetypes in the user's subscription (vless ws+tls with extra params, vless tcp+reality+flow, hy2 after pin strip with insecure=false + mport kept) were converted with the bundled core via a temporary Go test in libxray-src: all pass (test deleted after use; note a hand-transcribed 42-char pbk fails — real 43-char keys pass). Kotlin is code-reviewed only, CI builds.
+
 ## Local build prerequisite (AAR not in git)
 
 The 52MB `libXray.aar` is **not committed** (gitignored; the fork is pushed via the GitHub Git Data API, which cannot carry large binaries). Before building locally, place it at `android/app/libs/libXray.aar`:

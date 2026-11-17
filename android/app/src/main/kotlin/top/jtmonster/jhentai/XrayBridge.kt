@@ -1,5 +1,6 @@
 package top.jtmonster.jhentai
 
+import android.util.Base64
 import androidx.webkit.ProxyConfig
 import androidx.webkit.ProxyController
 import androidx.webkit.WebViewFeature
@@ -173,13 +174,7 @@ object XrayBridge {
      * nodes list means.
      */
     fun convertLinks(text: String): Map<String, Any> {
-        var body = text.trim()
-        if (!body.contains("://")) {
-            val decoded = runCatching { decodeSubscriptionText(body) }.getOrNull()
-            if (!decoded.isNullOrBlank()) {
-                body = decoded.trim()
-            }
-        }
+        val body = extractShareLinkText(text)
         val links = body.lineSequence().map { it.trim() }.filter { it.contains("://") }.toList()
         val nodes = mutableListOf<Map<String, String>>()
         val failures = mutableListOf<Map<String, String>>()
@@ -198,6 +193,100 @@ object XrayBridge {
             }
         }
         return mapOf("nodes" to nodes, "failures" to failures)
+    }
+
+    // ------------------------------------------------------------------
+    // Subscription body normalization
+    //
+    // LibXray's decodeSubscriptionText only decrypts Age-armored bodies and
+    // passes everything else through unchanged — it does NOT base64-decode,
+    // so a base64 subscription body used to sail through it untouched and
+    // yield zero links ("no nodes"). Base64 handling therefore lives here:
+    // plain link lists pass through, Age bodies still go to libXray, and
+    // base64 is tried both as one whole-body blob (the common format) and
+    // per line (some panels encode every link separately).
+    // ------------------------------------------------------------------
+
+    private fun extractShareLinkText(text: String): String {
+        val trimmed = text.trim()
+        if (trimmed.lineSequence().any { it.contains("://") }) {
+            return trimmed
+        }
+        val ageDecoded = runCatching { decodeSubscriptionText(trimmed) }.getOrNull()
+        if (!ageDecoded.isNullOrBlank() &&
+            ageDecoded.lineSequence().any { it.contains("://") }
+        ) {
+            return ageDecoded.trim()
+        }
+        decodeBase64Body(trimmed)?.let { return it }
+        return trimmed
+    }
+
+    private fun decodeBase64Body(text: String): String? {
+        val whole = tryDecodeBase64(text)
+        if (whole != null) {
+            if (whole.lineSequence().any { it.contains("://") }) {
+                return whole.trim()
+            }
+            // The blob may itself wrap per-line base64.
+            decodePerLineBase64(whole)?.let { return it }
+        }
+        return decodePerLineBase64(text)
+    }
+
+    private fun decodePerLineBase64(text: String): String? {
+        val out = StringBuilder()
+        var hits = 0
+        for (rawLine in text.lineSequence()) {
+            val line = rawLine.trim()
+            if (line.isEmpty()) {
+                continue
+            }
+            if (line.contains("://")) {
+                out.append(line).append('\n')
+                hits++
+                continue
+            }
+            val decoded = tryDecodeBase64(line) ?: continue
+            val decodedTrimmed = decoded.trim()
+            if (decodedTrimmed.lineSequence().any { it.contains("://") }) {
+                out.append(decodedTrimmed).append('\n')
+                hits++
+            }
+        }
+        return if (hits > 0) out.toString().trim() else null
+    }
+
+    private fun tryDecodeBase64(text: String): String? {
+        val cleaned = buildString {
+            for (c in text) {
+                when {
+                    c == '-' -> append('+')
+                    c == '_' -> append('/')
+                    !c.isWhitespace() -> append(c)
+                }
+            }
+        }
+        if (cleaned.isEmpty() || cleaned.length % 4 == 1) {
+            return null
+        }
+        val core = cleaned.trimEnd('=')
+        if (core.isEmpty() ||
+            !core.all { it in 'A'..'Z' || it in 'a'..'z' || it in '0'..'9' || it == '+' || it == '/' }
+        ) {
+            return null
+        }
+        val padded = core + "=".repeat((4 - core.length % 4) % 4)
+        val bytes = runCatching { Base64.decode(padded, Base64.NO_WRAP) }.getOrNull()
+            ?: return null
+        val decoded = runCatching { String(bytes, Charsets.UTF_8) }.getOrNull()
+            ?: return null
+        // Decoded subscriptions are printable text; replacement characters
+        // mean the input was not really base64-encoded UTF-8.
+        if (decoded.contains('�')) {
+            return null
+        }
+        return decoded
     }
 
     private fun fallbackName(link: String): String {
