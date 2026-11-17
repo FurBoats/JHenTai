@@ -41,16 +41,23 @@ class IgneousRefreshResult {
 ///
 /// This is the logic that used to live in the cookie page; its dedicated Dio
 /// pins traffic to the Xray igneous inbound (127.0.0.1:28781) in xray mode
-/// with no DIRECT fallback. Automatic callers (the Sad Panda retry in
-/// EHRequest) are throttled: at most one automatic refresh per
-/// [autoThrottle] window. Manual callers pass `force: true`.
+/// with no DIRECT fallback. Manual callers pass `force: true`.
+///
+/// Sad Panda callers use [refreshForSadPanda]: every Sad Panda triggers a
+/// refresh right away (no long throttle), but concurrent triggers share a
+/// single in-flight refresh, and a trigger landing within
+/// [sadPandaFreshWindow] after a successful refresh reuses that result —
+/// the caller just reloads its request with the fresh cookie.
 class IgneousRefreshService
     with JHLifeCircleBeanErrorCatch
     implements JHLifeCircleBean {
   static const Duration autoThrottle = Duration(minutes: 3);
+  static const Duration sadPandaFreshWindow = Duration(seconds: 20);
 
   Dio? _dio;
   DateTime? _lastAutoRefreshAt;
+  Future<IgneousRefreshResult>? _inFlightRefresh;
+  DateTime? _lastRefreshSuccessAt;
 
   @override
   List<JHLifeCircleBean> get initDependencies =>
@@ -71,7 +78,46 @@ class IgneousRefreshService
     return result.success;
   }
 
+  /// Refresh entry point for Sad Panda handling: refresh immediately,
+  /// unless a refresh is already in flight (share it) or one succeeded
+  /// within [sadPandaFreshWindow] (the stored cookie is fresh — the caller
+  /// should simply reload). A shared/reused success is reported with
+  /// `skipped: true` when no new request was made.
+  Future<IgneousRefreshResult> refreshForSadPanda() async {
+    DateTime? lastSuccess = _lastRefreshSuccessAt;
+    if (_inFlightRefresh == null &&
+        lastSuccess != null &&
+        DateTime.now().difference(lastSuccess) < sadPandaFreshWindow) {
+      log.info('Igneous already refreshed moments ago, skip for Sad Panda');
+      return const IgneousRefreshResult(success: true, skipped: true);
+    }
+    return refreshIgneousDetailed(force: true);
+  }
+
   Future<IgneousRefreshResult> refreshIgneousDetailed({
+    bool force = false,
+  }) async {
+    Future<IgneousRefreshResult>? inFlight = _inFlightRefresh;
+    if (inFlight != null) {
+      return inFlight;
+    }
+    Future<IgneousRefreshResult> future =
+        _refreshIgneousDetailed(force: force);
+    _inFlightRefresh = future;
+    try {
+      IgneousRefreshResult result = await future;
+      if (result.success) {
+        _lastRefreshSuccessAt = DateTime.now();
+      }
+      return result;
+    } finally {
+      if (identical(_inFlightRefresh, future)) {
+        _inFlightRefresh = null;
+      }
+    }
+  }
+
+  Future<IgneousRefreshResult> _refreshIgneousDetailed({
     bool force = false,
   }) async {
     if (!userSetting.hasLoggedIn() || userSetting.ipbPassHash.value == null) {
@@ -90,9 +136,9 @@ class IgneousRefreshService
       _lastAutoRefreshAt = DateTime.now();
     }
 
-    await _initDio();
-
     try {
+      await _initDio();
+
       Response response = await _dio!.request(
         EHConsts.EXIndex,
         options: Options(headers: {

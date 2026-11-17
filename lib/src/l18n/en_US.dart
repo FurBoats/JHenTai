@@ -507,6 +507,8 @@ class en_US {
       'refreshAllSubscriptions': 'Refresh All Subscriptions',
       'importResult': 'Imported @ok, skipped @skipped',
       'xrayFailoverTo': 'Main node unreachable, switched to @name',
+      'sadPandaAutoRefreshing': 'Sad Panda detected, refreshing igneous and reloading…',
+      'sadPandaAutoRefreshFailed': 'Auto-refresh igneous failed, please refresh it manually',
       'subscriptionRefreshFailed': 'Subscription Refresh Failed',
       'subscriptionRefreshed': 'Subscription Updated',
       'cronInvalid': 'Invalid Cron Expression',

@@ -118,6 +118,47 @@ class XrayService with JHLifeCircleBeanErrorCatch implements JHLifeCircleBean {
     _syncQueue = _syncQueue.then((_) => _sync()).catchError((_) {});
   }
 
+  /// Cold-start entry point, awaited from main() before runApp. When the
+  /// saved proxy mode is xray, bring the core up (and wait until its
+  /// loopback SOCKS listener actually accepts connections) before the UI
+  /// loads, so the home page's first requests don't hit a not-yet-listening
+  /// proxy port and die with connection reset. In doAfterBeanReady the
+  /// regular _sync then sees the core already running with the same nodes
+  /// and stays a no-op.
+  Future<void> ensureStartedForColdStart() async {
+    if (!isSupported) {
+      return;
+    }
+    if (networkSetting.proxyType.value != JProxyType.xray) {
+      return;
+    }
+    await _sync();
+    if (running.value) {
+      await _waitForMainInbound();
+    }
+  }
+
+  /// The native start call returns once the core is up, but the listener
+  /// can lag a few milliseconds behind; poll it briefly so the first real
+  /// request never races it.
+  Future<void> _waitForMainInbound() async {
+    DateTime deadline = DateTime.now().add(const Duration(seconds: 3));
+    while (DateTime.now().isBefore(deadline)) {
+      try {
+        Socket socket = await Socket.connect(
+          '127.0.0.1',
+          mainPort,
+          timeout: const Duration(milliseconds: 300),
+        );
+        socket.destroy();
+        return;
+      } catch (_) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+    }
+    log.info('Xray main inbound not accepting connections yet (cold start)');
+  }
+
   Future<void> _sync() async {
     if (!isSupported) {
       return;

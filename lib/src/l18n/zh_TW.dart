@@ -507,6 +507,8 @@ class zh_TW {
       'refreshAllSubscriptions': '全部刷新',
       'importResult': '已導入 @ok 個，跳過 @skipped 個',
       'xrayFailoverTo': '主節點不可達，已自動切換到 @name',
+      'sadPandaAutoRefreshing': '偵測到 Sad Panda，正在重新整理 igneous 並重新載入…',
+      'sadPandaAutoRefreshFailed': 'igneous 自動重新整理失敗，請手動重新整理',
       'subscriptionRefreshFailed': '訂閱刷新失敗',
       'subscriptionRefreshed': '訂閱已更新',
       'cronInvalid': 'Cron 表達式無效',

@@ -507,6 +507,8 @@ class zh_CN {
       'refreshAllSubscriptions': '全部刷新',
       'importResult': '已导入 @ok 个，跳过 @skipped 个',
       'xrayFailoverTo': '主节点不可达，已自动切换到 @name',
+      'sadPandaAutoRefreshing': '检测到 Sad Panda，正在刷新 igneous 并重新加载…',
+      'sadPandaAutoRefreshFailed': 'igneous 自动刷新失败，请手动刷新',
       'subscriptionRefreshFailed': '订阅刷新失败',
       'subscriptionRefreshed': '订阅已更新',
       'cronInvalid': 'Cron 表达式无效',

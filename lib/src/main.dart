@@ -134,6 +134,12 @@ void main(List<String> args) async {
     await bean.initBean();
   }
 
+  /// Cold start: in xray proxy mode, start the embedded core before the
+  /// first frame (all settings are loaded by now), so the home page's
+  /// initial requests don't run into a not-yet-listening loopback proxy
+  /// and fail with connection reset.
+  await xrayService.ensureStartedForColdStart();
+
   runApp(const MyApp());
 }
 

@@ -27,6 +27,7 @@ import 'package:jhentai/src/service/log.dart';
 import 'package:jhentai/src/utils/eh_spider_parser.dart';
 import 'package:jhentai/src/utils/proxy_util.dart';
 import 'package:jhentai/src/utils/string_uril.dart';
+import 'package:jhentai/src/utils/toast_util.dart';
 import 'package:http_parser/http_parser.dart' show MediaType;
 import 'package:path/path.dart';
 import 'package:webview_flutter/webview_flutter.dart' show WebViewCookieManager;
@@ -992,7 +993,6 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
       removeCacheByUrl(response.requestOptions.uri.toString());
       Response? retryResponse = await _retryAfterIgneousRefreshIfSadPanda(
         e,
-        response,
         () async {
           Response r = await _dio.get(
             url,
@@ -1043,7 +1043,6 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
     } on EHSiteException catch (e) {
       Response? retryResponse = await _retryAfterIgneousRefreshIfSadPanda(
         e,
-        response,
         () async {
           Response r = await _dio.post(
             url,
@@ -1067,32 +1066,35 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
     return response;
   }
 
-  /// A blank body from exhentai (Sad Panda) usually means the igneous
-  /// cookie went stale. Refresh it once through the igneous channel and let
-  /// the caller replay the request exactly once. Returns null when no retry
-  /// applies (other exception types, not logged in, refresh throttled or
-  /// failed, or the retry itself failed) — the caller then rethrows the
-  /// original exception.
+  /// In EX (exhentai) site mode, a blank body means Sad Panda — usually a
+  /// stale igneous cookie. Refresh the cookie through the igneous channel
+  /// right away and reload the request exactly once, telling the user via
+  /// toast what is happening. Returns null when no retry applies (not in
+  /// EX mode, other exception types, not logged in, refresh failed, or the
+  /// reload itself failed) — the caller then rethrows the original
+  /// exception.
   Future<Response?> _retryAfterIgneousRefreshIfSadPanda(
     EHSiteException exception,
-    Response failedResponse,
     Future<Response> Function() retry,
   ) async {
     if (exception.type != EHSiteExceptionType.blankBody) {
       return null;
     }
-    if (!_isExhentaiRequest(failedResponse)) {
+    if (ehSetting.site.value != 'EX') {
       return null;
     }
     if (!userSetting.hasLoggedIn() || userSetting.ipbPassHash.value == null) {
       return null;
     }
 
-    bool refreshed = await igneousRefreshService.refreshIgneous();
-    if (!refreshed) {
+    _toastSadPandaRefreshing();
+    IgneousRefreshResult result =
+        await igneousRefreshService.refreshForSadPanda();
+    if (!result.success) {
+      toast('sadPandaAutoRefreshFailed'.tr, isCenter: false, isShort: false);
       return null;
     }
-    log.info('Igneous refreshed after Sad Panda, retrying request once');
+    log.info('Igneous refreshed after Sad Panda, reloading request once');
     try {
       return await retry();
     } catch (_) {
@@ -1100,12 +1102,19 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
     }
   }
 
-  bool _isExhentaiRequest(Response response) {
-    if (response.requestOptions.uri.host == 'exhentai.org') {
-      return true;
+  DateTime? _lastSadPandaToastAt;
+
+  /// The refreshing toast is deduped: a page firing many requests at once
+  /// shows it only once per fresh window.
+  void _toastSadPandaRefreshing() {
+    DateTime now = DateTime.now();
+    if (_lastSadPandaToastAt != null &&
+        now.difference(_lastSadPandaToastAt!) <
+            IgneousRefreshService.sadPandaFreshWindow) {
+      return;
     }
-    dynamic fronting = response.requestOptions.extra[domainFrontingExtraKey];
-    return fronting is Map && fronting['host'] == 'exhentai.org';
+    _lastSadPandaToastAt = now;
+    toast('sadPandaAutoRefreshing'.tr, isCenter: false, isShort: false);
   }
 
   Exception _convertExceptionIfGalleryDeleted(DioException e) {

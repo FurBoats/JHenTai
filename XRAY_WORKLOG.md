@@ -55,6 +55,18 @@ Fix (XrayBridge.kt only): convertLinks now normalizes the body via `extractShare
 
 Verify: the decoding algorithm was ported 1:1 to Python and passes 7 cases (per-line base64 of link+CRLF — the user's format — per-line bare, per-line no-padding, whole-body, whole-body url-safe/no-padding/76-wrapped, plain passthrough, garbage rejected). The three link archetypes in the user's subscription (vless ws+tls with extra params, vless tcp+reality+flow, hy2 after pin strip with insecure=false + mport kept) were converted with the bundled core via a temporary Go test in libxray-src: all pass (test deleted after use; note a hand-transcribed 42-char pbk fails — real 43-char keys pass). Kotlin is code-reviewed only, CI builds.
 
+## v4 (2026-11-17, on top of 563a9d5)
+
+User device feedback round 3: two issues.
+
+1. **Sad Panda: refresh on every occurrence + reload + user-visible prompt** — v2 only retried on blankBody from exhentai-host requests and silently, behind a 3-minute auto throttle, so on device it often looked like nothing happened. Rework:
+   - Gate is now the site mode itself: `ehSetting.site.value == 'EX'` (was: request host == exhentai.org / domain-fronting host match; `_isExhentaiRequest` removed, along with the now-unused `failedResponse` parameter).
+   - New `IgneousRefreshService.refreshForSadPanda()`: no long throttle — every Sad Panda triggers a forced refresh immediately; concurrent triggers share one in-flight refresh (dedupe added inside `refreshIgneousDetailed`, which also records `_lastRefreshSuccessAt`); a trigger within 20s (`sadPandaFreshWindow`) after a successful refresh reuses it and just reloads. `_refreshIgneousDetailed` keeps the old body; `_initDio()` moved inside its try so init failures return a result instead of throwing.
+   - EHRequest toasts on trigger (`sadPandaAutoRefreshing`, deduped to once per fresh window) and on refresh failure (`sadPandaAutoRefreshFailed`); keys added to all 6 locales (zh translated, others English like xrayFailoverTo). On success the original request is reloaded exactly once, as before.
+2. **Cold start: core up before first frame** — previously the core only started in `doAfterBeanReady` (GetMaterialApp onReady), i.e. after the home page had already fired its first requests into a dead 127.0.0.1:28780 → connection reset. `main()` now awaits `xrayService.ensureStartedForColdStart()` after all beans' initBean (settings loaded) and before runApp: in xray mode it runs the regular `_sync()` start, then polls the main SOCKS port (100ms interval, 3s cap) until it accepts a connection. doAfterBeanReady's `_scheduleSync` then no-ops (same links already started). Non-xray modes and non-Android are untouched no-ops.
+
+Verify: dart format parse-check on all touched files OK; dart analyze on eh_request.dart / igneous_refresh_service.dart / xray_service.dart / main.dart: **0 errors** (only the pre-existing unreachable_switch_default warning at eh_request.dart:431, v1-confirmed). No local build (Gradle daemon loopback issue); CI builds.
+
 ## Local build prerequisite (AAR not in git)
 
 The 52MB `libXray.aar` is **not committed** (gitignored; the fork is pushed via the GitHub Git Data API, which cannot carry large binaries). Before building locally, place it at `android/app/libs/libXray.aar`:
