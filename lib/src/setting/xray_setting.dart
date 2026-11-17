@@ -12,13 +12,59 @@ class XrayNode {
   String name;
   String link;
 
-  XrayNode({required this.name, required this.link});
+  /// Name of the subscription this node came from; '' means manually imported.
+  String group;
+
+  XrayNode({required this.name, required this.link, this.group = ''});
 
   factory XrayNode.fromJson(Map<String, dynamic> json) {
-    return XrayNode(name: json['name'] ?? '', link: json['link'] ?? '');
+    return XrayNode(
+      name: json['name'] ?? '',
+      link: json['link'] ?? '',
+      group: json['group'] ?? '',
+    );
   }
 
-  Map<String, dynamic> toJson() => {'name': name, 'link': link};
+  Map<String, dynamic> toJson() => {'name': name, 'link': link, 'group': group};
+}
+
+class XraySubscription {
+  String id;
+  String name;
+  String url;
+
+  /// 5-field cron expression (minute hour day-of-month month day-of-week).
+  /// Empty means manual refresh only.
+  String cron;
+
+  /// Epoch milliseconds of the last successful refresh; 0 = never.
+  int lastUpdatedMs;
+
+  XraySubscription({
+    required this.id,
+    required this.name,
+    required this.url,
+    this.cron = '',
+    this.lastUpdatedMs = 0,
+  });
+
+  factory XraySubscription.fromJson(Map<String, dynamic> json) {
+    return XraySubscription(
+      id: json['id'] ?? '',
+      name: json['name'] ?? '',
+      url: json['url'] ?? '',
+      cron: json['cron'] ?? '',
+      lastUpdatedMs: json['lastUpdatedMs'] ?? 0,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'url': url,
+        'cron': cron,
+        'lastUpdatedMs': lastUpdatedMs,
+      };
 }
 
 /// Nodes for the embedded Xray core (Android only).
@@ -31,6 +77,7 @@ class XraySetting
     with JHLifeCircleBeanWithConfigStorage
     implements JHLifeCircleBean {
   RxList<XrayNode> nodes = <XrayNode>[].obs;
+  RxList<XraySubscription> subscriptions = <XraySubscription>[].obs;
   RxInt mainNodeIndex = (-1).obs;
   RxInt igneousNodeIndex = (-1).obs;
 
@@ -56,6 +103,10 @@ class XraySetting
     nodes.value = nodeList
         .map((e) => XrayNode.fromJson(Map<String, dynamic>.from(e)))
         .toList();
+    List subscriptionList = map['subscriptions'] ?? [];
+    subscriptions.value = subscriptionList
+        .map((e) => XraySubscription.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
     mainNodeIndex.value = map['mainNodeIndex'] ?? -1;
     igneousNodeIndex.value = map['igneousNodeIndex'] ?? -1;
   }
@@ -64,6 +115,7 @@ class XraySetting
   String toConfigString() {
     return jsonEncode({
       'nodes': nodes.map((e) => e.toJson()).toList(),
+      'subscriptions': subscriptions.map((e) => e.toJson()).toList(),
       'mainNodeIndex': mainNodeIndex.value,
       'igneousNodeIndex': igneousNodeIndex.value,
     });
@@ -116,6 +168,95 @@ class XraySetting
   Future<void> saveIgneousNodeIndex(int index) async {
     log.debug('saveIgneousNodeIndex:$index');
     igneousNodeIndex.value = index;
+    await saveBeanConfig();
+  }
+
+  // ------------------------------------------------------------------
+  // Subscriptions
+  // ------------------------------------------------------------------
+
+  XraySubscription? subscriptionById(String id) {
+    for (XraySubscription sub in subscriptions) {
+      if (sub.id == id) {
+        return sub;
+      }
+    }
+    return null;
+  }
+
+  Future<XraySubscription> addSubscription({
+    required String name,
+    required String url,
+    String cron = '',
+  }) async {
+    XraySubscription sub = XraySubscription(
+      id: '${DateTime.now().millisecondsSinceEpoch}-${subscriptions.length}',
+      name: name,
+      url: url,
+      cron: cron,
+    );
+    subscriptions.value = [...subscriptions, sub];
+    await saveBeanConfig();
+    return sub;
+  }
+
+  /// Removes the subscription and every node in its group, fixing the
+  /// main/igneous indices.
+  Future<void> removeSubscription(XraySubscription sub) async {
+    log.debug('removeXraySubscription:${sub.name}');
+    String? mainLink = mainNode?.link;
+    String? igneousLink = igneousNode?.link;
+    List<XrayNode> kept =
+        nodes.where((node) => node.group != sub.name).toList();
+    nodes.value = kept;
+    mainNodeIndex.value = _indexOfLink(kept, mainLink);
+    igneousNodeIndex.value = _indexOfLink(kept, igneousLink);
+    subscriptions.value =
+        subscriptions.where((e) => e.id != sub.id).toList();
+    await saveBeanConfig();
+  }
+
+  /// Replaces all nodes of [group] with [newNodes] (deduped by link). The
+  /// main/igneous selections follow their node by link; a selection whose
+  /// node disappeared becomes -1.
+  Future<void> replaceGroupNodes(String group, List<XrayNode> newNodes) async {
+    String? mainLink = mainNode?.link;
+    String? igneousLink = igneousNode?.link;
+
+    Set<String> seen = {};
+    List<XrayNode> deduped = [];
+    for (XrayNode node in newNodes) {
+      if (seen.add(node.link)) {
+        deduped.add(node);
+      }
+    }
+
+    List<XrayNode> merged = [
+      ...nodes.where((node) => node.group != group),
+      ...deduped,
+    ];
+    nodes.value = merged;
+    mainNodeIndex.value = _indexOfLink(merged, mainLink);
+    igneousNodeIndex.value = _indexOfLink(merged, igneousLink);
+    await saveBeanConfig();
+  }
+
+  int _indexOfLink(List<XrayNode> list, String? link) {
+    if (link == null) {
+      return -1;
+    }
+    for (int i = 0; i < list.length; i++) {
+      if (list[i].link == link) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  Future<void> saveSubscriptions() async {
+    // lastUpdatedMs mutations live on the subscription objects themselves;
+    // reassign so Rx listeners fire, then persist everything.
+    subscriptions.value = [...subscriptions];
     await saveBeanConfig();
   }
 }

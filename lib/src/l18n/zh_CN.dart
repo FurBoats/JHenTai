@@ -498,6 +498,18 @@ class zh_CN {
       'fetchSubscriptionFailed': '获取订阅失败',
       'nodesImported': '已导入 @count 个节点',
       'xrayAndroidOnly': 'Xray 仅支持 Android',
+      'manualImportGroup': '手动导入',
+      'subscriptions': '订阅',
+      'addSubscription': '添加订阅',
+      'subscriptionName': '订阅名称',
+      'subscriptionCron': 'Cron 表达式（留空则仅手动更新）',
+      'lastUpdated': '上次更新',
+      'refreshAllSubscriptions': '全部刷新',
+      'importResult': '已导入 @ok 个，跳过 @skipped 个',
+      'xrayFailoverTo': '主节点不可达，已自动切换到 @name',
+      'subscriptionRefreshFailed': '订阅刷新失败',
+      'subscriptionRefreshed': '订阅已更新',
+      'cronInvalid': 'Cron 表达式无效',
       'address': '地址',
 
       /// security setting page

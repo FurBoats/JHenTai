@@ -29,6 +29,16 @@ class MainActivity : FlutterFragmentActivity() {
             "top.jtmonster.jhentai.xray"
         )
         xrayMethodChannel.setMethodCallHandler { call, result ->
+            // ProxyController must be called on the main thread, and the
+            // method call handler already runs there: handle it inline.
+            if (call.method == "setWebViewProxy") {
+                XrayBridge.setWebViewProxy(
+                    call.argument<String>("mode") ?: "direct",
+                    call.argument<String>("address")
+                )
+                result.success(null)
+                return@setMethodCallHandler
+            }
             // libXray invoke calls are blocking JNI into Go: run them on a
             // background thread and post the result back to the main thread.
             xrayExecutor.execute {

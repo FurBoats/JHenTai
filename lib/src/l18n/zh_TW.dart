@@ -498,6 +498,18 @@ class zh_TW {
       'fetchSubscriptionFailed': '取得訂閱失敗',
       'nodesImported': '已匯入 @count 個節點',
       'xrayAndroidOnly': 'Xray 僅支援 Android',
+      'manualImportGroup': '手動導入',
+      'subscriptions': '訂閱',
+      'addSubscription': '添加訂閱',
+      'subscriptionName': '訂閱名稱',
+      'subscriptionCron': 'Cron 表達式（留空則僅手動更新）',
+      'lastUpdated': '上次更新',
+      'refreshAllSubscriptions': '全部刷新',
+      'importResult': '已導入 @ok 個，跳過 @skipped 個',
+      'xrayFailoverTo': '主節點不可達，已自動切換到 @name',
+      'subscriptionRefreshFailed': '訂閱刷新失敗',
+      'subscriptionRefreshed': '訂閱已更新',
+      'cronInvalid': 'Cron 表達式無效',
       'address': '地址',
 
       /// security setting page

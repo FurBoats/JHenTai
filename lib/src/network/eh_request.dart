@@ -17,6 +17,7 @@ import 'package:jhentai/src/model/search_config.dart';
 import 'package:jhentai/src/network/eh_ip_provider.dart';
 import 'package:jhentai/src/network/eh_timeout_translator.dart';
 import 'package:jhentai/src/pages/ranklist/ranklist_page_state.dart';
+import 'package:jhentai/src/service/igneous_refresh_service.dart';
 import 'package:jhentai/src/service/isolate_service.dart';
 import 'package:jhentai/src/service/path_service.dart';
 import 'package:jhentai/src/setting/eh_setting.dart';
@@ -987,9 +988,27 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
 
     try {
       _emitEHExceptionIfFailed(response);
-    } on EHSiteException catch (_) {
+    } on EHSiteException catch (e) {
       removeCacheByUrl(response.requestOptions.uri.toString());
-      rethrow;
+      Response? retryResponse = await _retryAfterIgneousRefreshIfSadPanda(
+        e,
+        response,
+        () async {
+          Response r = await _dio.get(
+            url,
+            queryParameters: queryParameters,
+            options: options,
+            cancelToken: cancelToken,
+            onReceiveProgress: onReceiveProgress,
+          );
+          _emitEHExceptionIfFailed(r);
+          return r;
+        },
+      );
+      if (retryResponse == null) {
+        rethrow;
+      }
+      return retryResponse;
     }
 
     return response;
@@ -1019,9 +1038,74 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
       throw _convertExceptionIfGalleryDeleted(e);
     }
 
-    _emitEHExceptionIfFailed(response);
+    try {
+      _emitEHExceptionIfFailed(response);
+    } on EHSiteException catch (e) {
+      Response? retryResponse = await _retryAfterIgneousRefreshIfSadPanda(
+        e,
+        response,
+        () async {
+          Response r = await _dio.post(
+            url,
+            data: data,
+            queryParameters: queryParameters,
+            options: options,
+            cancelToken: cancelToken,
+            onSendProgress: onSendProgress,
+            onReceiveProgress: onReceiveProgress,
+          );
+          _emitEHExceptionIfFailed(r);
+          return r;
+        },
+      );
+      if (retryResponse == null) {
+        rethrow;
+      }
+      return retryResponse;
+    }
 
     return response;
+  }
+
+  /// A blank body from exhentai (Sad Panda) usually means the igneous
+  /// cookie went stale. Refresh it once through the igneous channel and let
+  /// the caller replay the request exactly once. Returns null when no retry
+  /// applies (other exception types, not logged in, refresh throttled or
+  /// failed, or the retry itself failed) — the caller then rethrows the
+  /// original exception.
+  Future<Response?> _retryAfterIgneousRefreshIfSadPanda(
+    EHSiteException exception,
+    Response failedResponse,
+    Future<Response> Function() retry,
+  ) async {
+    if (exception.type != EHSiteExceptionType.blankBody) {
+      return null;
+    }
+    if (!_isExhentaiRequest(failedResponse)) {
+      return null;
+    }
+    if (!userSetting.hasLoggedIn() || userSetting.ipbPassHash.value == null) {
+      return null;
+    }
+
+    bool refreshed = await igneousRefreshService.refreshIgneous();
+    if (!refreshed) {
+      return null;
+    }
+    log.info('Igneous refreshed after Sad Panda, retrying request once');
+    try {
+      return await retry();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool _isExhentaiRequest(Response response) {
+    if (response.requestOptions.uri.host == 'exhentai.org') {
+      return true;
+    }
+    dynamic fronting = response.requestOptions.extra[domainFrontingExtraKey];
+    return fronting is Map && fronting['host'] == 'exhentai.org';
   }
 
   Exception _convertExceptionIfGalleryDeleted(DioException e) {

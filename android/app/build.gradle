@@ -78,4 +78,6 @@ dependencies {
     implementation(platform("org.jetbrains.kotlin:kotlin-bom:1.8.0"))
     // Embedded Xray core (XTLS/LibXray), used by XrayBridge via MethodChannel.
     implementation files('libs/libXray.aar')
+    // ProxyController for applying the app proxy to all WebViews.
+    implementation 'androidx.webkit:webkit:1.12.0'
 }

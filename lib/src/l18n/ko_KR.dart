@@ -498,6 +498,18 @@ class ko_KR {
       'fetchSubscriptionFailed': 'Failed to Fetch Subscription',
       'nodesImported': '@count node(s) imported',
       'xrayAndroidOnly': 'Xray is only available on Android',
+      'manualImportGroup': 'Manual Import',
+      'subscriptions': 'Subscriptions',
+      'addSubscription': 'Add Subscription',
+      'subscriptionName': 'Subscription Name',
+      'subscriptionCron': 'Cron expression (empty = manual only)',
+      'lastUpdated': 'Last updated',
+      'refreshAllSubscriptions': 'Refresh All Subscriptions',
+      'importResult': 'Imported @ok, skipped @skipped',
+      'xrayFailoverTo': 'Main node unreachable, switched to @name',
+      'subscriptionRefreshFailed': 'Subscription Refresh Failed',
+      'subscriptionRefreshed': 'Subscription Updated',
+      'cronInvalid': 'Invalid Cron Expression',
       'address': '주소',
 
       /// security setting page
