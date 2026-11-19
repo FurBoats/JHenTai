@@ -125,7 +125,7 @@ jobs:
         shell: bash
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
-            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            TAG="${{ github.ref_name }}"
           else
             TAG="${{ inputs.tag }}"
             if [ -z "$TAG" ]; then
@@ -133,20 +133,24 @@ jobs:
               XRAYVER="${LIBXRAY_VERSION#v}"
               TAG="Jhentai-${APPVER}-${XRAYVER}-$(date -u +%Y%m%d)"
             fi
-            echo "tag=$TAG" >> $GITHUB_OUTPUT
-            # action-gh-release needs an existing tag for a non-default target;
-            # create and push it at this commit when missing.
-            if ! git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; then
+            # action-gh-release needs an existing tag for a non-default
+            # target; create and push it only when it is not already on
+            # the remote (e.g. the tag was created by publishing the
+            # release in the web UI). A local `git rev-parse` is not
+            # enough: a shallow checkout may not have fetched the tag.
+            if git ls-remote --tags origin "$TAG" | grep -q .; then
+              echo "Tag $TAG already exists on remote, reusing it."
+            else
               git tag "$TAG"
               git push origin "refs/tags/$TAG"
             fi
           fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
           # Release body: prefer the curated notes file for this tag.
-          TAG_NAME=$(grep '^tag=' $GITHUB_OUTPUT | tail -1 | cut -d= -f2)
-          if [ -f "release-notes/${TAG_NAME}.md" ]; then
-            echo "body_file=release-notes/${TAG_NAME}.md" >> $GITHUB_OUTPUT
+          if [ -f "release-notes/${TAG}.md" ]; then
+            echo "body_file=release-notes/${TAG}.md" >> $GITHUB_OUTPUT
           else
-            printf 'JHenTai %s with built-in Xray core (%s).\n' "$TAG_NAME" "$LIBXRAY_VERSION" > /tmp/release-body.md
+            printf 'JHenTai %s with built-in Xray core (%s).\n' "$TAG" "$LIBXRAY_VERSION" > /tmp/release-body.md
             echo "body_file=/tmp/release-body.md" >> $GITHUB_OUTPUT
           fi
 
