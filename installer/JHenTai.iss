@@ -32,7 +32,10 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 WizardStyle=modern
 
 [Languages]
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+; The ChineseSimplified.isl shipped with Inno Setup is not present in
+; every installation (e.g. the GitHub-hosted runner image), so the
+; official language file is vendored next to this script.
+Name: "chinesesimplified"; MessagesFile: "{#SourcePath}ChineseSimplified.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
