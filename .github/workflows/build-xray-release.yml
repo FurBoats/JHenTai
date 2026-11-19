@@ -1,17 +1,21 @@
 name: Build Xray Release (Android)
 
 # Builds only the Android APKs of the xray-dual-node fork and publishes them
-# as a GitHub Release. Triggered by pushing an `xray-*` tag (the daily
+# as a GitHub Release. Triggered by pushing a `Jhentai-*` tag (the daily
 # sync-upstream workflow creates those) or manually via workflow_dispatch.
+# Release tags follow the scheme:
+#   Jhentai-<JHenTai version>-<Xray version>-<build date YYYYMMDD>
+# If a file release-notes/<tag>.md exists in the repo, it becomes the
+# release body; otherwise a minimal generated body is used.
 
 on:
   push:
     tags:
-      - 'xray-*'
+      - 'Jhentai-*'
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (empty = xray-manual-<date>)'
+        description: 'Release tag (empty = Jhentai-<ver>-<xrayver>-<date>)'
         required: false
         default: ''
 
@@ -26,6 +30,7 @@ jobs:
       contents: write
     env:
       FLUTTER_VERSION: 3.44.8
+      LIBXRAY_VERSION: v26.10.31
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -84,7 +89,6 @@ jobs:
       # both the zip and the extracted AAR by sha256.
       - name: Download LibXray AAR
         env:
-          LIBXRAY_VERSION: v26.10.31
           LIBXRAY_ZIP_SHA256: fb99f04acf379cc2957c1e1d0ce2b3c0005d3f49974a44c09a11242a0562c1ca
           LIBXRAY_AAR_SHA256: 4c90532f61ff8363e7fcf52e064ff1aa66d065e06afbadc0ea4c6acf384c452f
         run: |
@@ -104,10 +108,12 @@ jobs:
       - name: Build Android APKs
         run: |
           flutter build apk -t lib/src/main.dart --release --split-per-abi
+          flutter build apk -t lib/src/main.dart --release
           cd build/app/outputs/apk/release
           mv app-arm64-v8a-release.apk JHenTai-${{ steps.get_version.outputs.version }}-xray-arm64-v8a.apk
           mv app-armeabi-v7a-release.apk JHenTai-${{ steps.get_version.outputs.version }}-xray-armeabi-v7a.apk
           mv app-x86_64-release.apk JHenTai-${{ steps.get_version.outputs.version }}-xray-x86_64.apk
+          mv app-release.apk JHenTai-${{ steps.get_version.outputs.version }}-xray-universal.apk
 
       - name: Resolve release tag
         id: release_tag
@@ -118,7 +124,9 @@ jobs:
           else
             TAG="${{ inputs.tag }}"
             if [ -z "$TAG" ]; then
-              TAG="xray-manual-$(date -u +%Y%m%d-%H%M)"
+              APPVER=$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2 | cut -d '+' -f 1)
+              XRAYVER="${LIBXRAY_VERSION#v}"
+              TAG="Jhentai-${APPVER}-${XRAYVER}-$(date -u +%Y%m%d)"
             fi
             echo "tag=$TAG" >> $GITHUB_OUTPUT
             # action-gh-release needs an existing tag for a non-default target;
@@ -128,10 +136,19 @@ jobs:
               git push origin "refs/tags/$TAG"
             fi
           fi
+          # Release body: prefer the curated notes file for this tag.
+          TAG_NAME=$(grep '^tag=' $GITHUB_OUTPUT | tail -1 | cut -d= -f2)
+          if [ -f "release-notes/${TAG_NAME}.md" ]; then
+            echo "body_file=release-notes/${TAG_NAME}.md" >> $GITHUB_OUTPUT
+          else
+            printf 'JHenTai %s with built-in Xray core (%s).\n' "$TAG_NAME" "$LIBXRAY_VERSION" > /tmp/release-body.md
+            echo "body_file=/tmp/release-body.md" >> $GITHUB_OUTPUT
+          fi
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.release_tag.outputs.tag }}
           name: ${{ steps.release_tag.outputs.tag }}
+          body_path: ${{ steps.release_tag.outputs.body_file }}
           files: build/app/outputs/apk/release/JHenTai-*.apk
