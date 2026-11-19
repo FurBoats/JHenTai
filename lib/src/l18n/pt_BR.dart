@@ -468,6 +468,11 @@ class pt_BR {
       'selectExportItems': 'Select Export Items',
       'importData': 'Import Data',
       'importDataHint': 'App will shutdown automatically after importing to apply the latest configuration',
+      'exportAppData': 'Export Full App Data',
+      'exportAppDataHint': 'Account, all settings, Xray nodes and history; moves between the Windows installer/portable builds and Android',
+      'importAppData': 'Import Full App Data',
+      'importAppDataHint': 'Restores a full app-data bundle; the app closes and applies it on next launch',
+      'importAppDataSuccessHint': 'Import staged. The app will close now and apply the data on next launch',
 
       /// host mapping page
       'hostDataSource': 'Não há necessidade de alterar por padrão.\nFonte de dados: https://dns.google/',

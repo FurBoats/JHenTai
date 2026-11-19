@@ -123,3 +123,14 @@ every new release-notes/<tag>.md starts fresh.
 - Verify: flutter analyze on all touched Dart files: **0 errors** (only
   pre-existing warnings). Windows build itself runs in CI (no Windows
   toolchain in the sandbox).
+- **Full app-data export/import** (`app_data_transfer_service.dart`, added
+  same day at the user's request): the built-in export only covers a few
+  config types, so a file-level bundle was added — zip of a VACUUM INTO
+  snapshot of `db.sqlite` (all bean configs incl. account + Xray nodes,
+  history, block rules), `jhentai.gs`/`.bak`, and `cookies/`+`EBWebView/`
+  minus cache folders, plus a manifest. Import stages into
+  `appdata_import/` and `PathService` swaps it in at the next startup
+  before the DB/GetStorage opens (stale WAL/SHM deleted with the swap);
+  the staged DB's downloadSetting has its absolute path keys stripped so
+  a bundle from another machine/install never imports foreign paths.
+  Format is platform-independent: installer ⇄ portable ⇄ Android.

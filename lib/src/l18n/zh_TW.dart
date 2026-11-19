@@ -467,6 +467,11 @@ class zh_TW {
       'selectExportItems': '選擇匯出項',
       'importData': '匯入資料',
       'importDataHint': '在匯入成功後程式會自動關閉以套用最新設定',
+      'exportAppData': '匯出完整應用資料',
+      'exportAppDataHint': '包含帳號、全部設定、Xray 節點與歷史記錄，可在 Windows 安裝版/攜帶版與 Android 之間遷移',
+      'importAppData': '匯入完整應用資料',
+      'importAppDataHint': '恢復完整應用資料包；匯入後程式將關閉，下次啟動時生效',
+      'importAppDataSuccessHint': '匯入已就緒，程式將關閉，下次啟動時生效',
 
       /// host mapping page
       'hostDataSource': '預設情況下不用改動。\n資料來源: https://dns.google/',

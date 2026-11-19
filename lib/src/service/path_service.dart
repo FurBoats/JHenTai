@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import 'app_data_transfer_service.dart';
 import 'jh_service.dart';
 
 PathService pathService = PathService();
@@ -44,6 +45,9 @@ class PathService with JHLifeCircleBeanErrorCatch implements JHLifeCircleBean {
     if (Platform.isWindows) {
       _applyWindowsPortableOverride();
     }
+    // A staged full-data import is swapped in here, before any consumer
+    // opens the database or the GetStorage container.
+    AppDataTransferService.applyPendingImport(getVisibleDir().path);
   }
 
   /// Portable detection: a `portable.flag` file or an existing `JH_Data`

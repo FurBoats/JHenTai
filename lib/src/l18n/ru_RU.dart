@@ -472,6 +472,11 @@ class ru_RU {
       'selectExportItems': 'Выбрать элементы для экспорта',
       'importData': 'Импорт данных',
       'importDataHint': 'Приложение автоматически закроется после импорта для применения конфигурации',
+      'exportAppData': 'Export Full App Data',
+      'exportAppDataHint': 'Account, all settings, Xray nodes and history; moves between the Windows installer/portable builds and Android',
+      'importAppData': 'Import Full App Data',
+      'importAppDataHint': 'Restores a full app-data bundle; the app closes and applies it on next launch',
+      'importAppDataSuccessHint': 'Import staged. The app will close now and apply the data on next launch',
 
       /// host mapping page
       'hostDataSource': 'По умолчанию менять не нужно.\nИсточник данных: https://dns.google/',

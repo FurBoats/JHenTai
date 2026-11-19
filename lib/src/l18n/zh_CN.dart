@@ -467,6 +467,11 @@ class zh_CN {
       'selectExportItems': '选择导出项',
       'importData': '导入数据',
       'importDataHint': '在导入成功后应用会自动关闭以应用最新配置',
+      'exportAppData': '导出完整应用数据',
+      'exportAppDataHint': '包含账号、全部设置、Xray 节点与历史记录，可在 Windows 安装版/携带版与 Android 之间迁移',
+      'importAppData': '导入完整应用数据',
+      'importAppDataHint': '恢复完整应用数据包；导入后应用将关闭，下次启动时生效',
+      'importAppDataSuccessHint': '导入已就绪，应用将关闭，下次启动时生效',
 
       /// host mapping page
       'hostDataSource': '默认情况下不用改动。\n数据来源: https://dns.google/',

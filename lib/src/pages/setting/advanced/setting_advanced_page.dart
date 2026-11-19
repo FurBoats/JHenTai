@@ -6,11 +6,13 @@ import 'package:extended_image/extended_image.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:jhentai/src/extension/widget_extension.dart';
 import 'package:jhentai/src/model/config.dart';
 import 'package:jhentai/src/network/eh_request.dart';
+import 'package:jhentai/src/service/app_data_transfer_service.dart';
 import 'package:jhentai/src/service/cloud_service.dart';
 import 'package:jhentai/src/setting/advanced_setting.dart';
 import 'package:jhentai/src/service/path_service.dart';
@@ -45,6 +47,9 @@ class _SettingAdvancedPageState extends State<SettingAdvancedPage> {
   LoadingState _exportDataLoadingState = LoadingState.idle;
   LoadingState _importDataLoadingState = LoadingState.idle;
 
+  LoadingState _exportAppDataLoadingState = LoadingState.idle;
+  LoadingState _importAppDataLoadingState = LoadingState.idle;
+
   @override
   void initState() {
     super.initState();
@@ -75,6 +80,8 @@ class _SettingAdvancedPageState extends State<SettingAdvancedPage> {
             _buildInNoImageMode(),
             _buildImportData(context),
             _buildExportData(context),
+            _buildImportAppData(context),
+            _buildExportAppData(context),
           ],
         ).withListTileTheme(context),
       ),
@@ -257,6 +264,146 @@ class _SettingAdvancedPageState extends State<SettingAdvancedPage> {
       ),
       onTap: () => _exportData(context),
     );
+  }
+
+  Widget _buildImportAppData(BuildContext context) {
+    return ListTile(
+      title: Text('importAppData'.tr),
+      subtitle: Text('importAppDataHint'.tr),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          LoadingStateIndicator(
+            loadingState: _importAppDataLoadingState,
+            idleWidgetBuilder: () => const Icon(Icons.keyboard_arrow_right),
+            successWidgetSameWithIdle: true,
+            useCupertinoIndicator: true,
+            errorWidgetSameWithIdle: true,
+          ).marginOnly(right: 8)
+        ],
+      ),
+      onTap: () => _importAppData(context),
+    );
+  }
+
+  Widget _buildExportAppData(BuildContext context) {
+    return ListTile(
+      title: Text('exportAppData'.tr),
+      subtitle: Text('exportAppDataHint'.tr),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          LoadingStateIndicator(
+            loadingState: _exportAppDataLoadingState,
+            idleWidgetBuilder: () => const Icon(Icons.keyboard_arrow_right),
+            successWidgetSameWithIdle: true,
+            useCupertinoIndicator: true,
+            errorWidgetSameWithIdle: true,
+          ).marginOnly(right: 8)
+        ],
+      ),
+      onTap: () => _exportAppData(context),
+    );
+  }
+
+  Future<void> _exportAppData(BuildContext context) async {
+    if (_exportAppDataLoadingState == LoadingState.loading) {
+      return;
+    }
+    setStateSafely(() => _exportAppDataLoadingState = LoadingState.loading);
+
+    try {
+      var bytes = await AppDataTransferService.exportAppData(
+        visibleDirPath: pathService.getVisibleDir().path,
+        tempDirPath: pathService.tempDir.path,
+      );
+      String fileName = 'JHenTaiAppData-${DateFormat('yyyyMMddHHmmss').format(DateTime.now())}.zip';
+      String? savedPath;
+      if (GetPlatform.isMobile) {
+        savedPath = await FilePicker.platform.saveFile(
+          fileName: fileName,
+          type: FileType.custom,
+          allowedExtensions: ['zip'],
+          bytes: bytes,
+          lockParentWindow: true,
+        );
+      } else {
+        savedPath = await FilePicker.platform.saveFile(
+          fileName: fileName,
+          type: FileType.custom,
+          allowedExtensions: ['zip'],
+          lockParentWindow: true,
+        );
+        if (savedPath != null) {
+          await File(savedPath).writeAsBytes(bytes);
+        }
+      }
+      if (savedPath != null) {
+        log.info('Export app data to $savedPath success');
+        toast('success'.tr);
+        setStateSafely(() => _exportAppDataLoadingState = LoadingState.success);
+      } else {
+        setStateSafely(() => _exportAppDataLoadingState = LoadingState.idle);
+      }
+    } on Exception catch (e) {
+      log.error('Export app data failed', e);
+      toast('internalError'.tr);
+      setStateSafely(() => _exportAppDataLoadingState = LoadingState.error);
+    }
+  }
+
+  Future<void> _importAppData(BuildContext context) async {
+    FilePickerResult? result;
+    try {
+      result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['zip'],
+        allowCompression: false,
+        compressionQuality: 0,
+      );
+    } on Exception catch (e) {
+      log.error('Pick import app data file failed', e);
+      return;
+    }
+
+    if (result == null || result.files.first.path == null) {
+      return;
+    }
+    if (_importAppDataLoadingState == LoadingState.loading) {
+      return;
+    }
+
+    log.info('Import app data from ${result.files.first.path}');
+    setStateSafely(() => _importAppDataLoadingState = LoadingState.loading);
+
+    try {
+      List<int> bytes = await File(result.files.first.path!).readAsBytes();
+      bool staged = await AppDataTransferService.stageImport(
+        visibleDirPath: pathService.getVisibleDir().path,
+        zipBytes: bytes,
+      );
+      if (!staged) {
+        toast('internalError'.tr);
+        setStateSafely(() => _importAppDataLoadingState = LoadingState.error);
+        return;
+      }
+      setStateSafely(() => _importAppDataLoadingState = LoadingState.success);
+      toast('importAppDataSuccessHint'.tr);
+
+      // The staged bundle is swapped in at the next startup, before the
+      // database opens; close the app now so no stale state is written
+      // back over it.
+      await Future.delayed(const Duration(seconds: 1));
+      if (GetPlatform.isMobile) {
+        SystemNavigator.pop();
+      } else {
+        exit(0);
+      }
+    } catch (e, s) {
+      log.error('Import app data failed', e, s);
+      toast('internalError'.tr);
+      setStateSafely(() => _importAppDataLoadingState = LoadingState.error);
+    }
   }
 
   Future<void> _loadingLogSize() async {
