@@ -109,80 +109,48 @@ begin
   Result := S;
 end;
 
-{ Uninstall: before anything is removed, offer the "erase app data"
-  checkbox (only when the data folder actually exists). Cancelling this
-  dialog aborts the uninstall; the checkbox choice is remembered and
-  acted on in CurUninstallStepChanged. }
+{ Uninstall: the "erase app data" checkbox lives on the uninstall
+  progress form (only added when the data folder actually exists). It
+  starts unchecked, so data survives unless the user actively opts in;
+  the choice is acted on in CurUninstallStepChanged. }
 function InitializeUninstall: Boolean;
-var
-  Form: TSetupForm;
-  InfoLabel: TLabel;
-  OkButton, CancelButton: TNewButton;
-  DataDir: String;
 begin
   Result := True;
   UninstallEraseData := False;
+end;
+
+procedure InitializeUninstallProgressForm;
+var
+  DataDir: String;
+begin
   DataDir := ExpandConstant('{userappdata}\' + AppDataSuffix);
   if not DirExists(DataDir) then
     exit;
 
-  Form := CreateCustomForm;
-  try
-    Form.Caption := '卸载 {#MyAppName}';
-    Form.ClientWidth := ScaleX(440);
-    Form.ClientHeight := ScaleY(150);
+  UninstallProgressForm.ClientHeight :=
+    UninstallProgressForm.ClientHeight + ScaleY(30);
 
-    InfoLabel := TLabel.Create(Form);
-    InfoLabel.Parent := Form;
-    InfoLabel.Left := ScaleX(16);
-    InfoLabel.Top := ScaleY(14);
-    InfoLabel.Width := Form.ClientWidth - ScaleX(32);
-    InfoLabel.AutoSize := False;
-    InfoLabel.WordWrap := True;
-    InfoLabel.Caption := '即将卸载 {#MyAppName}。应用数据保存在：' + DataDir;
-
-    EraseDataCheckBox := TNewCheckBox.Create(Form);
-    EraseDataCheckBox.Parent := Form;
-    EraseDataCheckBox.Left := ScaleX(16);
-    EraseDataCheckBox.Top := ScaleY(56);
-    EraseDataCheckBox.Width := Form.ClientWidth - ScaleX(32);
-    EraseDataCheckBox.Caption := '擦除应用数据（设置、账号与默认下载内容）';
-    EraseDataCheckBox.Checked := True;
-
-    OkButton := TNewButton.Create(Form);
-    OkButton.Parent := Form;
-    OkButton.Caption := '继续卸载';
-    OkButton.ModalResult := mrOk;
-    OkButton.Default := True;
-    OkButton.Left := Form.ClientWidth - ScaleX(196);
-    OkButton.Top := Form.ClientHeight - ScaleY(44);
-    OkButton.Width := ScaleX(84);
-    OkButton.Height := ScaleY(28);
-
-    CancelButton := TNewButton.Create(Form);
-    CancelButton.Parent := Form;
-    CancelButton.Caption := '取消';
-    CancelButton.ModalResult := mrCancel;
-    CancelButton.Cancel := True;
-    CancelButton.Left := Form.ClientWidth - ScaleX(100);
-    CancelButton.Top := Form.ClientHeight - ScaleY(44);
-    CancelButton.Width := ScaleX(84);
-    CancelButton.Height := ScaleY(28);
-
-    if Form.ShowModal = mrOk then
-      UninstallEraseData := EraseDataCheckBox.Checked
-    else
-      Result := False;
-  finally
-    Form.Free;
-  end;
+  EraseDataCheckBox := TNewCheckBox.Create(UninstallProgressForm);
+  EraseDataCheckBox.Parent := UninstallProgressForm;
+  EraseDataCheckBox.Left := UninstallProgressForm.ProgressBar.Left;
+  EraseDataCheckBox.Top := UninstallProgressForm.ProgressBar.Top +
+    UninstallProgressForm.ProgressBar.Height + ScaleY(10);
+  EraseDataCheckBox.Width := UninstallProgressForm.ProgressBar.Width;
+  EraseDataCheckBox.Height := ScaleY(20);
+  EraseDataCheckBox.Caption := '擦除应用数据（设置、账号与默认下载内容）';
+  EraseDataCheckBox.Checked := False;
 end;
+
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   DataDir, AppDir, UserAppData: String;
 begin
-  if (CurUninstallStep <> usPostUninstall) or (not UninstallEraseData) then
+  if CurUninstallStep <> usPostUninstall then
+    exit;
+  if Assigned(EraseDataCheckBox) then
+    UninstallEraseData := EraseDataCheckBox.Checked;
+  if not UninstallEraseData then
     exit;
 
   UserAppData := RemoveBackslashUnlessRoot(ExpandConstant('{userappdata}'));
