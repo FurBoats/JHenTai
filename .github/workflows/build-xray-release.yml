@@ -107,13 +107,18 @@ jobs:
 
       - name: Build Android APKs
         run: |
+          # Rename split APKs BEFORE the universal build: a second
+          # `flutter build apk` run clears the gradle output dir
+          # (build/app/outputs/apk/release), wiping the split APKs there.
+          # The flutter-apk dir keeps copies of every build's output.
           flutter build apk -t lib/src/main.dart --release --split-per-abi
-          flutter build apk -t lib/src/main.dart --release
-          cd build/app/outputs/apk/release
+          cd build/app/outputs/flutter-apk
           mv app-arm64-v8a-release.apk JHenTai-${{ steps.get_version.outputs.version }}-xray-arm64-v8a.apk
           mv app-armeabi-v7a-release.apk JHenTai-${{ steps.get_version.outputs.version }}-xray-armeabi-v7a.apk
           mv app-x86_64-release.apk JHenTai-${{ steps.get_version.outputs.version }}-xray-x86_64.apk
-          mv app-release.apk JHenTai-${{ steps.get_version.outputs.version }}-xray-universal.apk
+          cd "$GITHUB_WORKSPACE"
+          flutter build apk -t lib/src/main.dart --release
+          mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/JHenTai-${{ steps.get_version.outputs.version }}-xray-universal.apk
 
       - name: Resolve release tag
         id: release_tag
@@ -151,4 +156,4 @@ jobs:
           tag_name: ${{ steps.release_tag.outputs.tag }}
           name: ${{ steps.release_tag.outputs.tag }}
           body_path: ${{ steps.release_tag.outputs.body_file }}
-          files: build/app/outputs/apk/release/JHenTai-*.apk
+          files: build/app/outputs/flutter-apk/JHenTai-*.apk
