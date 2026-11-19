@@ -1,12 +1,15 @@
-name: Build Xray Release (Android)
+name: Build Xray Release (Android + Windows)
 
-# Builds only the Android APKs of the xray-dual-node fork and publishes them
-# as a GitHub Release. Triggered by pushing a `Jhentai-*` tag (the daily
+# Builds the Android APKs and the Windows client (portable zip + Inno
+# Setup installer) of the xray fork and publishes them as a GitHub
+# Release. Triggered by pushing a `Jhentai-*` tag (the daily
 # sync-upstream workflow creates those) or manually via workflow_dispatch.
 # Release tags follow the scheme:
 #   Jhentai-<JHenTai version>-<Xray version>-<build date YYYYMMDD>
 # If a file release-notes/<tag>.md exists in the repo, it becomes the
 # release body; otherwise a minimal generated body is used.
+# Convention: a release-notes file lists ONLY that release's changes —
+# never a cumulative history.
 
 on:
   push:
@@ -161,3 +164,119 @@ jobs:
           name: ${{ steps.release_tag.outputs.tag }}
           body_path: ${{ steps.release_tag.outputs.body_file }}
           files: build/app/outputs/flutter-apk/JHenTai-*.apk
+
+  # Windows client: same libXray build as the Android AAR, shipped as
+  # libXray.dll beside the executable and driven from Dart via FFI
+  # (XrayWindowsBridge). Produces a portable zip (portable.flag + data in
+  # JH_Data next to the exe) and an Inno Setup installer (per-user,
+  # data in AppData). Runs after the Android job so the release and its
+  # body exist before the Windows assets are attached.
+  BuildWindows:
+    needs: BuildAndroid
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      FLUTTER_VERSION: 3.44.8
+      LIBXRAY_VERSION: v26.10.31
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JHenTai API secret
+        shell: bash
+        env:
+          JH_API_SECRET_CONFIG: ${{ secrets.JH_API_SECRET_CONFIG }}
+        run: |
+          if [ -n "$JH_API_SECRET_CONFIG" ]; then
+            echo "$JH_API_SECRET_CONFIG" > lib/src/config/jh_api_secret_config.dart
+          fi
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'master'
+          cache: true
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      # The embedded Xray core DLL is not committed to git. Download the
+      # exact LibXray release the fork is developed against and verify the
+      # zip by sha256. windows/CMakeLists.txt bundles the DLL beside the
+      # executable when it sits in windows/ at build time.
+      - name: Download LibXray DLL
+        shell: bash
+        env:
+          LIBXRAY_WIN_ZIP_SHA256: 9a3b1548667836a42b48bb0e37505726d4cd72e8429182e870b92df4cc8172f3
+        run: |
+          curl -sSL -o /tmp/libxray-windows-x64.zip \
+            "https://github.com/XTLS/LibXray/releases/download/${LIBXRAY_VERSION}/libxray-windows-x64.zip"
+          echo "${LIBXRAY_WIN_ZIP_SHA256}  /tmp/libxray-windows-x64.zip" | sha256sum -c -
+          unzip -o -j /tmp/libxray-windows-x64.zip 'libxray-windows-x64/libXray.dll' -d windows
+          ls -la windows/libXray.dll
+
+      - name: Get app version
+        id: get_version
+        shell: bash
+        run: |
+          echo "version=$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2 | cut -d '+' -f 1)" >> $GITHUB_OUTPUT
+
+      - name: Build Windows
+        run: flutter build windows -t lib/src/main.dart --release
+
+      - name: Package portable zip
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.get_version.outputs.version }}"
+          New-Item -ItemType Directory -Force -Path "dist" | Out-Null
+          $stage = "dist/JHenTai-$ver-windows-portable"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item -Recurse "build/windows/x64/runner/Release/*" $stage
+          New-Item -ItemType File -Force -Path "$stage/portable.flag" | Out-Null
+          Compress-Archive -Path "$stage/*" -DestinationPath "dist/JHenTai-$ver-windows-portable.zip" -Force
+
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          $ver = "${{ steps.get_version.outputs.version }}"
+          & $iscc "/DMyAppVersion=$ver" "installer\JHenTai.iss"
+          Move-Item "installer\JHenTai-$ver-windows-setup.exe" "dist\" -Force
+
+      - name: Resolve release tag
+        id: release_tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            TAG="${{ github.ref_name }}"
+          else
+            TAG="${{ inputs.tag }}"
+            if [ -z "$TAG" ]; then
+              APPVER=$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2 | cut -d '+' -f 1)
+              XRAYVER="${LIBXRAY_VERSION#v}"
+              TAG="Jhentai-${APPVER}-${XRAYVER}-$(date -u +%Y%m%d)"
+            fi
+            if git ls-remote --tags origin "$TAG" | grep -q .; then
+              echo "Tag $TAG already exists on remote, reusing it."
+            else
+              git tag "$TAG"
+              git push origin "refs/tags/$TAG" || git ls-remote --tags origin "$TAG" | grep -q .
+            fi
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      # No body_path here on purpose: the Android job owns the release
+      # body (release-notes/<tag>.md, this release's changes only).
+      - name: Publish release (Windows assets)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_tag.outputs.tag }}
+          name: ${{ steps.release_tag.outputs.tag }}
+          files: |
+            dist/JHenTai-*-windows-portable.zip
+            dist/JHenTai-*-windows-setup.exe
