@@ -224,6 +224,13 @@ jobs:
           echo "version=$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2 | cut -d '+' -f 1)" >> $GITHUB_OUTPUT
 
       - name: Build Windows
+        # The current windows-latest image ships VS 18 / MSVC 14.52, whose
+        # STL hard-errors (STL1011) on the <experimental/coroutine> usage
+        # inside the local_auth_windows and permission_handler_windows
+        # plugins. The CL env var adds the vendor-suggested silence define
+        # to every cl.exe invocation of the build.
+        env:
+          CL: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
         run: flutter build windows -t lib/src/main.dart --release
 
       - name: Package portable zip
