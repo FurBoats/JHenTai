@@ -14,8 +14,8 @@ import java.util.concurrent.Executor
  * The door into the embedded Xray core (libXray AAR, JSON-envelope invoke API).
  *
  * Two loopback SOCKS inbounds are exposed:
- *  - [MAIN_PORT] routes to the "main" outbound (all normal traffic)
- *  - [IGNEOUS_PORT] routes to the "igneous" outbound (only the exhentai igneous
+ *  - [mainPort] routes to the "main" outbound (all normal traffic)
+ *  - [igneousPort] routes to the "igneous" outbound (only the exhentai igneous
  *    cookie refresh uses it)
  *
  * Every invoke call is blocking JNI into Go: callers must stay off the main thread.
@@ -23,8 +23,13 @@ import java.util.concurrent.Executor
  */
 object XrayBridge {
     private const val API_VERSION = 3
-    const val MAIN_PORT = 28780
-    const val IGNEOUS_PORT = 28781
+
+    // Loopback SOCKS ports, chosen on the Dart side (XrayService): 23366 /
+    // 23367 by default, a random free port when a default is occupied.
+    // Dart passes the resolved ports with every start / setWebViewProxy
+    // call; the fallbacks here only cover a missing argument.
+    var mainPort: Int = 23366
+    var igneousPort: Int = 23367
 
     private fun invoke(method: String, payload: JSONObject): JSONObject? {
         val request = JSONObject()
@@ -334,14 +339,16 @@ object XrayBridge {
     }
 
     /** Validates and (re)starts the core with the dual-node config. Empty link = direct (freedom). */
-    fun start(mainLink: String?, igneousLink: String?) {
+    fun start(mainLink: String?, igneousLink: String?, mainPort: Int, igneousPort: Int) {
+        this.mainPort = mainPort
+        this.igneousPort = igneousPort
         val config = JSONObject()
             .put("log", JSONObject().put("loglevel", "warning"))
             .put(
                 "inbounds",
                 JSONArray()
-                    .put(socksInbound("in-main", MAIN_PORT))
-                    .put(socksInbound("in-igneous", IGNEOUS_PORT))
+                    .put(socksInbound("in-main", mainPort))
+                    .put(socksInbound("in-igneous", igneousPort))
             )
             .put(
                 "outbounds",
@@ -396,7 +403,8 @@ object XrayBridge {
     // defaults to HTTP, so SOCKS proxies must carry the "socks://" scheme.
     // ------------------------------------------------------------------
 
-    fun setWebViewProxy(mode: String, address: String?) {
+    fun setWebViewProxy(mode: String, address: String?, mainPort: Int) {
+        this.mainPort = mainPort
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)) {
             return
         }
@@ -406,7 +414,7 @@ object XrayBridge {
         try {
             when (mode) {
                 "xray" -> controller.setProxyOverride(
-                    ProxyConfig.Builder().addProxyRule("socks://127.0.0.1:$MAIN_PORT").build(),
+                    ProxyConfig.Builder().addProxyRule("socks://127.0.0.1:$mainPort").build(),
                     executor
                 ) {}
                 "http" -> {

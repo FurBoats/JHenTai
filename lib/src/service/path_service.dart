@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:get/get.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'jh_service.dart';
@@ -22,6 +23,12 @@ class PathService with JHLifeCircleBeanErrorCatch implements JHLifeCircleBean {
 
   Directory? systemDownloadDir;
 
+  /// Windows portable mode: the portable package ships a `portable.flag`
+  /// file next to the executable, and all app/account data then lives in
+  /// the `JH_Data` folder beside the executable instead of AppData.
+  bool isPortableWindows = false;
+  Directory? portableDataDir;
+
   @override
   List<JHLifeCircleBean> get initDependencies => [];
 
@@ -34,6 +41,31 @@ class PathService with JHLifeCircleBeanErrorCatch implements JHLifeCircleBean {
       getExternalStorageDirectory().then((value) => externalStorageDir = value).catchError((error) => null),
       getDownloadsDirectory().then((value) => systemDownloadDir = value).catchError((error) => null),
     ]);
+    if (Platform.isWindows) {
+      _applyWindowsPortableOverride();
+    }
+  }
+
+  /// Portable detection: a `portable.flag` file or an existing `JH_Data`
+  /// folder next to the executable. The installed build ships neither, so
+  /// it keeps the path_provider defaults (AppData, no admin rights needed).
+  void _applyWindowsPortableOverride() {
+    try {
+      String exeDir = p.dirname(Platform.resolvedExecutable);
+      Directory dataDir = Directory(p.join(exeDir, 'JH_Data'));
+      bool flagged = File(p.join(exeDir, 'portable.flag')).existsSync();
+      if (!flagged && !dataDir.existsSync()) {
+        return;
+      }
+      dataDir.createSync(recursive: true);
+      isPortableWindows = true;
+      portableDataDir = dataDir;
+      appDocDir = dataDir;
+      appSupportDir = dataDir;
+    } catch (_) {
+      // Fall back to the path_provider defaults if the portable folder
+      // cannot be created (e.g. read-only install location).
+    }
   }
 
   @override

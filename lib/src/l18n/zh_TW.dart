@@ -801,6 +801,7 @@ favnote：配對收藏備註
 
       /// download setting page
       'downloadPath': '下載路徑',
+      'chooseDownloadPath': '選擇下載路徑',
       'changeDownloadPathHint': '長按來改變下載路徑(請不要使用SD卡或系統路徑)。會自動複製已下載的畫廊到新路徑，並保留原文件。如果你遇到相關錯誤，請嘗試重設路徑',
       'resetDownloadPath': '重設下載路徑',
       'singleImageSavePath': '單張圖片儲存路徑',

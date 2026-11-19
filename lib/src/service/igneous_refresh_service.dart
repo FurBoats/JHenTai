@@ -8,6 +8,7 @@ import 'package:jhentai/src/extension/dio_exception_extension.dart';
 import 'package:jhentai/src/network/eh_ip_provider.dart';
 import 'package:jhentai/src/network/eh_request.dart';
 import 'package:jhentai/src/network/eh_timeout_translator.dart';
+import 'package:jhentai/src/service/xray_service.dart';
 import 'package:jhentai/src/setting/network_setting.dart';
 import 'package:jhentai/src/setting/user_setting.dart';
 import 'package:jhentai/src/utils/cookie_util.dart';
@@ -40,7 +41,7 @@ class IgneousRefreshResult {
 /// the member cookies and storing the returned cookie.
 ///
 /// This is the logic that used to live in the cookie page; its dedicated Dio
-/// pins traffic to the Xray igneous inbound (127.0.0.1:28781) in xray mode
+/// pins traffic to the Xray igneous inbound (XrayService.igneousAddress) in xray mode
 /// with no DIRECT fallback. Manual callers pass `force: true`.
 ///
 /// Sad Panda callers use [refreshForSadPanda]: every Sad Panda triggers a
@@ -205,9 +206,10 @@ class IgneousRefreshService
     ));
 
     /// This Dio refreshes the igneous cookie, so in xray mode its traffic is
-    /// pinned to the igneous node's inbound (127.0.0.1:28781) with no DIRECT
-    /// fallback. In every other mode the client is left untouched and keeps
-    /// using the global proxy override, exactly as before.
+    /// pinned to the igneous node's inbound (XrayService.igneousAddress)
+    /// with no DIRECT fallback. In every other mode the client is left
+    /// untouched and keeps using the global proxy override, exactly as
+    /// before.
     _dio!.httpClientAdapter = IOHttpClientAdapter(
       createHttpClient: () {
         HttpClient client = HttpClient();
@@ -215,7 +217,7 @@ class IgneousRefreshService
           return networkSetting.allIPs.contains(host);
         };
         if (networkSetting.proxyType.value == JProxyType.xray) {
-          client.findProxy = (_) => 'SOCKS5 127.0.0.1:28781';
+          client.findProxy = (_) => 'SOCKS5 ${XrayService.igneousAddress}';
         }
         return client;
       },

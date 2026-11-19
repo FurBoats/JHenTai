@@ -804,6 +804,7 @@ class ru_RU {
 
       /// download setting page
       'downloadPath': 'Путь загрузки',
+      'chooseDownloadPath': 'Choose download path',
       'changeDownloadPathHint':
           'Долгий тап для изменения (не используйте SD-карту или системные пути). Скачанные галереи будут скопированы автоматически, старые файлы сохранены. При ошибках попробуйте сбросить.',
       'resetDownloadPath': 'Сбросить путь загрузки',

@@ -52,6 +52,11 @@ abstract class BaseLayoutLogic extends GetxController with GetTickerProviderStat
   final ReadPageState readPageState = Get.find<ReadPageLogic>().state;
 
   Timer? autoModeTimer;
+
+  /// Last time a mouse wheel event turned a page. High-resolution wheels
+  /// and precision touchpads emit a burst of scroll events for a single
+  /// physical notch; without a cooldown one notch would skip many pages.
+  DateTime? _lastWheelPageTurnAt;
   Worker? doubleTapGestureSwitcherListener;
   Worker? tapDragGestureSwitcherListener;
   Worker? showScrollBarListener;
@@ -127,10 +132,21 @@ abstract class BaseLayoutLogic extends GetxController with GetTickerProviderStat
     if (ctrlPressed) {
       return;
     }
+    if (value.scrollDelta.dy == 0) {
+      return;
+    }
+
+    // One physical wheel notch = one page turn: swallow the rest of the
+    // event burst a high-resolution wheel sends for the same notch.
+    DateTime now = DateTime.now();
+    if (_lastWheelPageTurnAt != null && now.difference(_lastWheelPageTurnAt!) < const Duration(milliseconds: 280)) {
+      return;
+    }
+    _lastWheelPageTurnAt = now;
 
     if (value.scrollDelta.dy > 0) {
       toNext();
-    } else if (value.scrollDelta.dy < 0) {
+    } else {
       toPrev();
     }
   }

@@ -114,8 +114,8 @@ class ReadActionBinding {
 
 class KeyboardShortcutSetting with JHLifeCircleBeanWithConfigStorage implements JHLifeCircleBean {
   static final Map<ReadAction, List<ReadActionBinding?>> _defaults = {
-    ReadAction.toNext: [ReadActionBinding.keyboard(LogicalKeyboardKey.pageDown.keyId), null],
-    ReadAction.toPrev: [ReadActionBinding.keyboard(LogicalKeyboardKey.pageUp.keyId), null],
+    ReadAction.toNext: [ReadActionBinding.keyboard(LogicalKeyboardKey.pageDown.keyId), ReadActionBinding.keyboard(LogicalKeyboardKey.arrowDown.keyId)],
+    ReadAction.toPrev: [ReadActionBinding.keyboard(LogicalKeyboardKey.pageUp.keyId), ReadActionBinding.keyboard(LogicalKeyboardKey.arrowUp.keyId)],
     ReadAction.toLeft: [ReadActionBinding.keyboard(LogicalKeyboardKey.arrowLeft.keyId), null],
     ReadAction.toRight: [ReadActionBinding.keyboard(LogicalKeyboardKey.arrowRight.keyId), null],
     ReadAction.back: [ReadActionBinding.keyboard(LogicalKeyboardKey.escape.keyId), null],

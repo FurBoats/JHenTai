@@ -795,6 +795,7 @@ class en_US {
 
       /// download setting page
       'downloadPath': 'Download Path',
+      'chooseDownloadPath': 'Choose download path',
       'changeDownloadPathHint':
           'Long press to change(do not use SD-Card or any system path). Will copy downloaded galleries automatically and keep old files. If you meet any error, try to reset.',
       'resetDownloadPath': 'Reset Download Path',

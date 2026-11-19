@@ -18,6 +18,7 @@ import 'package:jhentai/src/network/eh_ip_provider.dart';
 import 'package:jhentai/src/network/eh_timeout_translator.dart';
 import 'package:jhentai/src/pages/ranklist/ranklist_page_state.dart';
 import 'package:jhentai/src/service/igneous_refresh_service.dart';
+import 'package:jhentai/src/service/xray_service.dart';
 import 'package:jhentai/src/service/isolate_service.dart';
 import 'package:jhentai/src/service/path_service.dart';
 import 'package:jhentai/src/setting/eh_setting.dart';
@@ -272,7 +273,7 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
         // Embedded Xray core main inbound (see XrayService.mainAddress).
         return ProxyConfig(
           type: ProxyType.socks5,
-          address: '127.0.0.1:28780',
+          address: XrayService.mainAddress,
         );
     }
   }

@@ -5,6 +5,7 @@ import 'package:jhentai/src/service/log.dart';
 import 'package:jhentai/src/utils/string_uril.dart';
 import 'package:system_network_proxy/system_network_proxy.dart';
 
+import '../service/xray_service.dart';
 import '../setting/network_setting.dart';
 
 Future<String> getSystemProxyAddress() async {
@@ -55,7 +56,7 @@ Future<String Function(Uri)> findProxySettingFunc(ValueGetter<String> systemProx
         return 'DIRECT';
       case JProxyType.xray:
         // Embedded Xray core main inbound (see XrayService.mainAddress).
-        return 'SOCKS5 127.0.0.1:28780; DIRECT';
+        return 'SOCKS5 ${XrayService.mainAddress}; DIRECT';
     }
   };
 }

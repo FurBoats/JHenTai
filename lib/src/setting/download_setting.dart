@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:jhentai/src/consts/eh_consts.dart';
 import 'package:jhentai/src/enum/config_enum.dart';
@@ -16,6 +18,11 @@ DownloadSetting downloadSetting = DownloadSetting();
 class DownloadSetting with JHLifeCircleBeanWithConfigStorage implements JHLifeCircleBean {
   late String defaultDownloadPath;
   late RxString downloadPath;
+
+  /// Windows only: whether the user has confirmed a download path. The
+  /// first download asks for one (default: the user's Downloads/JHentai
+  /// folder); see [ensureDownloadPathChosen].
+  RxBool downloadPathConfigured = false.obs;
   RxBool downloadOriginalImageByDefault = false.obs;
   RxnString defaultGalleryGroup = RxnString();
   RxnString defaultArchiveGroup = RxnString();
@@ -70,6 +77,7 @@ class DownloadSetting with JHLifeCircleBeanWithConfigStorage implements JHLifeCi
     manageArchiveDownloadConcurrency.value = map['manageArchiveDownloadConcurrency'] ?? manageArchiveDownloadConcurrency.value;
     deleteArchiveFileAfterDownload.value = map['deleteArchiveFileAfterDownload'] ?? deleteArchiveFileAfterDownload.value;
     restoreTasksAutomatically.value = map['restoreTasksAutomatically'] ?? restoreTasksAutomatically.value;
+    downloadPathConfigured.value = map['downloadPathConfigured'] ?? downloadPathConfigured.value;
   }
 
   @override
@@ -92,6 +100,7 @@ class DownloadSetting with JHLifeCircleBeanWithConfigStorage implements JHLifeCi
       'manageArchiveDownloadConcurrency': manageArchiveDownloadConcurrency.value,
       'deleteArchiveFileAfterDownload': deleteArchiveFileAfterDownload.value,
       'restoreTasksAutomatically': restoreTasksAutomatically.value,
+      'downloadPathConfigured': downloadPathConfigured.value,
     });
   }
 
@@ -115,6 +124,72 @@ class DownloadSetting with JHLifeCircleBeanWithConfigStorage implements JHLifeCi
     log.debug('saveDownloadPath:$downloadPath');
     this.downloadPath.value = downloadPath;
     await saveBeanConfig();
+  }
+
+  /// Windows first-download gate: until the user confirms where downloads
+  /// go, show a one-time dialog prefilled with the user's Downloads folder
+  /// plus a `JHentai` subfolder, with a folder picker. Returns false when
+  /// the user cancels, in which case the caller must abort the download.
+  /// On other platforms, and once configured, this is a no-op pass-through.
+  Future<bool> ensureDownloadPathChosen() async {
+    if (!Platform.isWindows || downloadPathConfigured.value) {
+      return true;
+    }
+    if (Get.context == null) {
+      // No UI to ask with (background call): don't block the download.
+      return true;
+    }
+    String initialPath = pathService.systemDownloadDir != null
+        ? join(pathService.systemDownloadDir!.path, 'JHentai')
+        : defaultDownloadPath;
+    TextEditingController controller =
+        TextEditingController(text: initialPath);
+    bool? confirmed = await Get.dialog<bool>(
+      AlertDialog(
+        title: Text('chooseDownloadPath'.tr),
+        content: SizedBox(
+          width: 460,
+          child: Row(
+            children: [
+              Expanded(child: TextField(controller: controller)),
+              IconButton(
+                icon: const Icon(Icons.folder_open),
+                onPressed: () async {
+                  String? picked =
+                      await FilePicker.platform.getDirectoryPath();
+                  if (picked != null && picked.isNotEmpty) {
+                    controller.text = picked;
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(result: false),
+            child: Text('cancel'.tr),
+          ),
+          TextButton(
+            onPressed: () => Get.back(result: true),
+            child: Text('OK'.tr),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return false;
+    }
+    String chosen = controller.text.trim();
+    if (chosen.isEmpty) {
+      chosen = initialPath;
+    }
+    await Directory(chosen).create(recursive: true);
+    await saveDownloadPath(chosen);
+    downloadPathConfigured.value = true;
+    await saveBeanConfig();
+    await _ensureDownloadDirExists();
+    return true;
   }
 
   Future<void> addExtraGalleryScanPath(String newPath) async {

@@ -93,3 +93,13 @@ install(DIRECTORY "${PROJECT_BUILD_DIR}/${FLUTTER_ASSET_DIR_NAME}"
 install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   CONFIGURATIONS Profile;Release
   COMPONENT Runtime)
+
+# Embedded Xray core for Windows (libXray.dll, the same libXray build the
+# Android AAR wraps). CI downloads it next to this file before building;
+# when present it is bundled beside the executable, where the Dart FFI
+# bridge (XrayWindowsBridge) loads it from.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/libXray.dll")
+  install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/libXray.dll"
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+endif()

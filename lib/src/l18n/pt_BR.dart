@@ -796,6 +796,7 @@ class pt_BR {
 
       /// download setting page
       'downloadPath': 'Caminho de download',
+      'chooseDownloadPath': 'Choose download path',
       'changeDownloadPathHint':
           'Pressione e segure para mudar. Alterar o caminho de download copiará as galerias baixadas automaticamente e manterá os arquivos antigos. Se você achar que não consegue carregar a imagem, tente redefinir o caminho.',
       'resetDownloadPath': 'Redefinir caminho de download',

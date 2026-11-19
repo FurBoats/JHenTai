@@ -34,7 +34,8 @@ class MainActivity : FlutterFragmentActivity() {
             if (call.method == "setWebViewProxy") {
                 XrayBridge.setWebViewProxy(
                     call.argument<String>("mode") ?: "direct",
-                    call.argument<String>("address")
+                    call.argument<String>("address"),
+                    call.argument<Int>("mainPort") ?: XrayBridge.mainPort
                 )
                 result.success(null)
                 return@setMethodCallHandler
@@ -52,7 +53,9 @@ class MainActivity : FlutterFragmentActivity() {
                         "start" -> {
                             XrayBridge.start(
                                 call.argument<String>("mainLink"),
-                                call.argument<String>("igneousLink")
+                                call.argument<String>("igneousLink"),
+                                call.argument<Int>("mainPort") ?: 23366,
+                                call.argument<Int>("igneousPort") ?: 23367
                             )
                             null
                         }

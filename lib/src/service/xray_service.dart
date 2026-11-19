@@ -10,6 +10,7 @@ import '../utils/cron_util.dart';
 import 'jh_service.dart';
 import 'log.dart';
 import 'subscription_fetch.dart';
+import 'xray_windows_bridge.dart';
 
 XrayService xrayService = XrayService();
 
@@ -28,7 +29,9 @@ class XrayConvertResult {
   XrayConvertResult({required this.nodes, required this.failures});
 }
 
-/// Drives the embedded Xray core through the Android MethodChannel.
+/// Drives the embedded Xray core: through the Android MethodChannel on
+/// Android, and through the Dart FFI bridge ([XrayWindowsBridge]) on
+/// Windows. Both end at the same libXray invoke API.
 ///
 /// The core exposes two loopback SOCKS inbounds:
 /// - [mainPort]: routed to the main node; [findProxySettingFunc] points all
@@ -36,19 +39,72 @@ class XrayConvertResult {
 /// - [igneousPort]: routed to the igneous node; only the igneous cookie
 ///   refresh Dio uses it.
 ///
-/// Extra duties: keeping the WebView proxy override in sync with the app
-/// proxy setting, cron-based subscription auto-refresh, and main-node
-/// failover (the igneous node never fails over).
+/// Ports default to 23366/23367 and are resolved once per process: when a
+/// default port is already occupied, a random free port takes its place
+/// (see [ensurePortsResolved]). Consumers must always read [mainAddress] /
+/// [igneousAddress] instead of hardcoding a port.
 ///
-/// On non-Android platforms every method is a no-op.
+/// Extra duties: keeping the WebView proxy override in sync with the app
+/// proxy setting (Android only), cron-based subscription auto-refresh, and
+/// main-node failover (the igneous node never fails over).
+///
+/// On platforms other than Android and Windows every method is a no-op.
 class XrayService with JHLifeCircleBeanErrorCatch implements JHLifeCircleBean {
   static const MethodChannel _channel =
       MethodChannel('top.jtmonster.jhentai.xray');
 
-  static const int mainPort = 28780;
-  static const int igneousPort = 28781;
-  static const String mainAddress = '127.0.0.1:28780';
-  static const String igneousAddress = '127.0.0.1:28781';
+  static const int defaultMainPort = 23366;
+  static const int defaultIgneousPort = 23367;
+
+  static int _mainPort = defaultMainPort;
+  static int _igneousPort = defaultIgneousPort;
+  static bool _portsResolved = false;
+
+  static int get mainPort => _mainPort;
+  static int get igneousPort => _igneousPort;
+  static String get mainAddress => '127.0.0.1:$_mainPort';
+  static String get igneousAddress => '127.0.0.1:$_igneousPort';
+
+  /// Picks the loopback ports for this process: the defaults when they are
+  /// free, a random free port for each one that is already occupied.
+  static Future<void> ensurePortsResolved() async {
+    if (_portsResolved) {
+      return;
+    }
+    _portsResolved = true;
+    _mainPort = await _resolvePort(defaultMainPort);
+    _igneousPort = await _resolvePort(defaultIgneousPort, avoid: _mainPort);
+    if (_mainPort != defaultMainPort || _igneousPort != defaultIgneousPort) {
+      log.info(
+          'Xray default port occupied, using main=$_mainPort igneous=$_igneousPort');
+    }
+  }
+
+  static Future<int> _resolvePort(int preferred, {int? avoid}) async {
+    if (preferred != avoid && await _isPortFree(preferred)) {
+      return preferred;
+    }
+    try {
+      ServerSocket socket =
+          await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      int port = socket.port;
+      await socket.close();
+      return port;
+    } catch (_) {
+      return preferred;
+    }
+  }
+
+  static Future<bool> _isPortFree(int port) async {
+    try {
+      ServerSocket socket =
+          await ServerSocket.bind(InternetAddress.loopbackIPv4, port);
+      await socket.close();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 
   RxBool running = false.obs;
 
@@ -58,7 +114,7 @@ class XrayService with JHLifeCircleBeanErrorCatch implements JHLifeCircleBean {
   /// Set when the main node was automatically switched by failover.
   RxString failoverNote = ''.obs;
 
-  bool get isSupported => GetPlatform.isAndroid;
+  bool get isSupported => GetPlatform.isAndroid || GetPlatform.isWindows;
 
   bool _started = false;
   String? _startedMainLink;
@@ -188,8 +244,22 @@ class XrayService with JHLifeCircleBeanErrorCatch implements JHLifeCircleBean {
 
     try {
       status.value = 'starting';
-      await _channel.invokeMethod(
-          'start', {'mainLink': mainLink, 'igneousLink': igneousLink});
+      await ensurePortsResolved();
+      if (Platform.isWindows) {
+        await XrayWindowsBridge.start(
+          mainLink: mainLink,
+          igneousLink: igneousLink,
+          mainPort: mainPort,
+          igneousPort: igneousPort,
+        );
+      } else {
+        await _channel.invokeMethod('start', {
+          'mainLink': mainLink,
+          'igneousLink': igneousLink,
+          'mainPort': mainPort,
+          'igneousPort': igneousPort,
+        });
+      }
       _started = true;
       _startedMainLink = mainLink;
       _startedIgneousLink = igneousLink;
@@ -212,7 +282,11 @@ class XrayService with JHLifeCircleBeanErrorCatch implements JHLifeCircleBean {
     }
 
     try {
-      await _channel.invokeMethod('stop');
+      if (Platform.isWindows) {
+        await XrayWindowsBridge.stop();
+      } else {
+        await _channel.invokeMethod('stop');
+      }
     } catch (e, stack) {
       log.error('Xray core stop failed', e, stack);
     }
@@ -229,6 +303,9 @@ class XrayService with JHLifeCircleBeanErrorCatch implements JHLifeCircleBean {
     if (!isSupported) {
       return false;
     }
+    if (Platform.isWindows) {
+      return XrayWindowsBridge.isRunning();
+    }
     return await _channel.invokeMethod<bool>('isRunning') ?? false;
   }
 
@@ -241,8 +318,10 @@ class XrayService with JHLifeCircleBeanErrorCatch implements JHLifeCircleBean {
     if (!isSupported) {
       return XrayConvertResult(nodes: [], failures: []);
     }
-    Map<dynamic, dynamic>? result =
-        await _channel.invokeMapMethod<dynamic, dynamic>('convertLinks', text);
+    Map<dynamic, dynamic>? result = Platform.isWindows
+        ? await XrayWindowsBridge.convertLinks(text)
+        : await _channel.invokeMapMethod<dynamic, dynamic>(
+            'convertLinks', text);
     if (result == null) {
       return XrayConvertResult(nodes: [], failures: []);
     }
@@ -270,6 +349,9 @@ class XrayService with JHLifeCircleBeanErrorCatch implements JHLifeCircleBean {
     if (!isSupported) {
       return text;
     }
+    if (Platform.isWindows) {
+      return XrayWindowsBridge.decodeSubscriptionText(text);
+    }
     return await _channel.invokeMethod<String>('decodeSubscription', text) ??
         '';
   }
@@ -292,6 +374,13 @@ class XrayService with JHLifeCircleBeanErrorCatch implements JHLifeCircleBean {
     if (!isSupported) {
       return;
     }
+    if (Platform.isWindows) {
+      // The Windows WebView (WebView2) takes its proxy from the process
+      // command line at environment creation; there is no runtime override
+      // to sync. The app's HTTP stack follows the proxy setting itself.
+      return;
+    }
+    await ensurePortsResolved();
     String mode;
     String address = '';
     switch (networkSetting.proxyType.value) {
@@ -318,8 +407,8 @@ class XrayService with JHLifeCircleBeanErrorCatch implements JHLifeCircleBean {
         break;
     }
     try {
-      await _channel.invokeMethod(
-          'setWebViewProxy', {'mode': mode, 'address': address});
+      await _channel.invokeMethod('setWebViewProxy',
+          {'mode': mode, 'address': address, 'mainPort': mainPort});
     } catch (e) {
       log.error('Sync WebView proxy failed: $e');
     }

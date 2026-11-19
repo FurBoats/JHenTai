@@ -117,6 +117,11 @@ class ArchiveDownloadService extends GetxController with GridBasePageServiceMixi
   }
 
   Future<void> downloadArchive(ArchiveDownloadedData archive, {bool resume = false, bool reParse = false}) async {
+    // Windows: the first download asks where files should go.
+    if (!resume && !await downloadSetting.ensureDownloadPathChosen()) {
+      return;
+    }
+
     await _ensureDownloadDirExists();
 
     if (!resume) {

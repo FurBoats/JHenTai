@@ -175,6 +175,11 @@ class GalleryDownloadService extends GetxController with GridBasePageServiceMixi
       return;
     }
 
+    // Windows: the first download asks where files should go.
+    if (!await downloadSetting.ensureDownloadPathChosen()) {
+      return;
+    }
+
     _ensureDownloadDirExists();
 
     GalleryDownloadedData gallery = _toGalleryDownloadedData(request, DownloadStatus.downloading);

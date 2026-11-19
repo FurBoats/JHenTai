@@ -78,3 +78,48 @@ The 52MB `libXray.aar` is **not committed** (gitignored; the fork is pushed via 
 - Signing: build.gradle release always uses signingConfigs.release built from android/key.properties; without the file all values are null. Local release build may fail on signing — will test; CI workflow handles it (secret or ephemeral keystore + key.properties).
 - Android SDK present: platforms android-37.0/37.2, build-tools 36/37, cmdline-tools latest. Project compileSdk 36 — may need sdkmanager "platforms;android-36".
 - JDK21 at ~/tools/jdk21; AGP version in project TBD — try jdk21 first, fallback JDK17 download.
+
+## 2026-11-20 — Windows client, port 23366, release-notes convention
+
+Standing rule (user, 2026-11-20): **release notes list only that release's
+changes** — no more cumulative backfill. The 20261119 notes stay as history;
+every new release-notes/<tag>.md starts fresh.
+
+- **Windows Xray bridge** (`lib/src/service/xray_windows_bridge.dart`): the
+  official LibXray v26.10.31 release also ships `libxray-windows-x64.zip`
+  (zip sha256 `9a3b1548667836a42b48bb0e37505726d4cd72e8429182e870b92df4cc8172f3`)
+  containing `libXray.dll` with the same JSON invoke API via C exports
+  `CGoInvoke`/`CGoFree`. The bridge is a one-to-one Dart port of the Kotlin
+  bridge (hy2 pin preprocessing, base64 subscription decoding, dual-inbound
+  config) calling the DLL through FFI from a background isolate.
+  `XrayService.isSupported` now covers Android + Windows; WebView proxy sync
+  stays Android-only (WebView2 has no runtime proxy override).
+- **Ports**: defaults changed 28780/28781 → **23366/23367** on both
+  platforms. `XrayService.ensurePortsResolved()` probes the defaults once
+  per process; an occupied default is replaced by a random free port.
+  All consumers read `XrayService.mainAddress` / `igneousAddress` (the
+  hardcoded strings in proxy_util / eh_request / igneous_refresh_service
+  are gone); Dart passes the resolved ports to the Kotlin bridge with
+  every start / setWebViewProxy call.
+- **Windows data dirs** (`path_service.dart`): portable packages carry a
+  `portable.flag` next to the exe → all app/account data goes to `JH_Data`
+  beside the exe (created on first run). Installed builds keep the
+  path_provider default `%APPDATA%\top.jtmonster\jhentai` (no admin rights).
+- **Windows first download** (`download_setting.dart`): first gallery or
+  archive download pops a path chooser prefilled with
+  `<system Downloads>\JHentai`; the choice persists as
+  `downloadPathConfigured` in the download setting config.
+- **Reader**: wheel page-turns in paged layouts get a 280ms cooldown (one
+  notch = one page); ArrowUp/ArrowDown added as second-slot default
+  bindings for prev/next page.
+- **Packaging**: `windows/CMakeLists.txt` bundles `windows/libXray.dll`
+  when present (CI downloads it, sha256-verified). New `BuildWindows` job
+  in build-xray-release.yml (needs BuildAndroid) produces the portable zip
+  and an Inno Setup installer (`installer/JHenTai.iss`): per-user install,
+  optional Start-menu/desktop-shortcut tasks, existing-version detection
+  shown on the Ready page, and an uninstall-time "erase app data" checkbox
+  that deletes ONLY `%APPDATA%\top.jtmonster\jhentai` after strict
+  constant-path validation.
+- Verify: flutter analyze on all touched Dart files: **0 errors** (only
+  pre-existing warnings). Windows build itself runs in CI (no Windows
+  toolchain in the sandbox).
