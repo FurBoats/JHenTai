@@ -158,7 +158,8 @@ begin
   AppDir := RemoveBackslashUnlessRoot(ExpandConstant('{app}'));
 
   { Safety net against ever deleting the wrong thing:
-    - the target must be exactly {userappdata}\top.jtmonster\jhentai,
+    - the target must be exactly the per-user AppData folder
+      plus the fixed suffix top.jtmonster\jhentai,
       rebuilt here from constants only — never from user input, the
       registry, or the install path;
     - it must live directly under this user's AppData folder;
