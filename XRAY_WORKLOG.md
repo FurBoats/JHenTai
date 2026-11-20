@@ -148,7 +148,8 @@ every new release-notes/<tag>.md starts fresh.
 - **Igneous node removed**: XraySetting drops `igneousNodeIndex`;
   XrayService/Windows bridge/Kotlin bridge now build a single-inbound
   config (main only, port 23366 default). IgneousRefreshService was
-  rewritten: API mode (default) POSTs the base cookies as JSON to the
+  rewritten: API mode (opt-in, off by default — default is the legacy
+direct refresh through the app proxy / main node) POSTs base cookies as JSON to the
   configured refresh API (default
   `https://exrefresh.fur.boats/ign_refresh`) and stores the returned
   igneous; legacy mode requests the EX index directly. Both ride

@@ -41,13 +41,15 @@ class IgneousRefreshResult {
 /// Refreshes the exhentai `igneous` cookie and stores the fresh value.
 ///
 /// Two refresh modes (see AdvancedSetting):
-/// - API mode (default): POST the base cookies as JSON to the configured
-///   refresh API (a self-hosted igneous_refresh service), which performs
-///   the exhentai request from its own network and returns the freshly
-///   issued igneous. The request goes through the app's configured proxy
-///   when one is set (Xray main node included).
-/// - Legacy mode: request the EX index directly with the base cookies
-///   over the app's normal network path and keep the returned cookie.
+/// - Legacy mode (default): request the EX index directly with the base
+///   cookies over the app's normal network path (the configured proxy /
+///   Xray main node) and keep the returned cookie.
+/// - API mode (opt-in, off by default; enabled only from the cookie
+///   page's long-press dialog): POST the base cookies as JSON to the
+///   configured refresh API (a self-hosted igneous_refresh service),
+///   which performs the exhentai request from its own network and
+///   returns the freshly issued igneous. The request goes through the
+///   app's configured proxy when one is set (Xray main node included).
 ///
 /// There is no dedicated igneous proxy node anymore; both modes ride the
 /// normal proxy setting.

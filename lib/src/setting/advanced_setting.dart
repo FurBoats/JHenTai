@@ -33,7 +33,7 @@ class AdvancedSetting with JHLifeCircleBeanWithConfigStorage implements JHLifeCi
   /// Refresh mode: true = call the refresh API ([igneousRefreshApiUrl]),
   /// false = legacy direct request to the EX index over the normal
   /// network path. On by default: the API is the primary refresh path.
-  RxBool useIgneousRefreshApi = true.obs;
+  RxBool useIgneousRefreshApi = false.obs;
   RxString igneousRefreshApiUrl = defaultIgneousRefreshApiUrl.obs;
 
   @override
