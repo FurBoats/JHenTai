@@ -185,3 +185,9 @@ direct refresh through the app proxy / main node) POSTs base cookies as JSON to 
   cookie is stored, a placeholder row shows the value as "empty"
   (l18n `emptyValue`), so the refresh button and the long-press
   refresh-mode dialog stay reachable.
+- **-3 first build fix**: run #17's Windows job failed Inno compilation
+  with "Unknown identifier 'faDirectory'" (Inno Pascal Script has no
+  Delphi-style attribute constants). The directory test now uses a
+  locally defined DirectoryAttribute = $10 (FILE_ATTRIBUTE_DIRECTORY).
+  The incomplete -3 Release/tag from run #17 were deleted and the
+  workflow re-triggered from the fixed master.

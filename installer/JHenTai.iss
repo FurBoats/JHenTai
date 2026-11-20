@@ -67,6 +67,10 @@ const
     erasure always keeps this one; everything else in the data folder
     is removed. }
   DownloadDirName = 'download';
+  { Win32 FILE_ATTRIBUTE_DIRECTORY flag. Inno's Pascal Script does
+    not know the Delphi-style faDirectory identifier (run -3 failed
+    compilation on exactly that), so the value is spelled out here. }
+  DirectoryAttribute = $10;
 
 var
   ExistingVersion: String;
@@ -163,7 +167,7 @@ begin
            (CompareText(FindRec.Name, DownloadDirName) <> 0) then
         begin
           Entry := DataDir + '\' + FindRec.Name;
-          if (FindRec.Attributes and faDirectory) <> 0 then
+          if (FindRec.Attributes and DirectoryAttribute) <> 0 then
             DelTree(Entry, True, True, True)
           else
             DeleteFile(Entry);
