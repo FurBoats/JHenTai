@@ -6,7 +6,7 @@ import 'package:get/get.dart';
 
 import '../setting/network_setting.dart';
 import '../setting/xray_setting.dart';
-import '../utils/cron_util.dart';
+import '../utils/toast_util.dart';
 import 'jh_service.dart';
 import 'log.dart';
 import 'subscription_fetch.dart';
@@ -33,20 +33,19 @@ class XrayConvertResult {
 /// Android, and through the Dart FFI bridge ([XrayWindowsBridge]) on
 /// Windows. Both end at the same libXray invoke API.
 ///
-/// The core exposes two loopback SOCKS inbounds:
-/// - [mainPort]: routed to the main node; [findProxySettingFunc] points all
-///   normal traffic here when the proxy type is xray.
-/// - [igneousPort]: routed to the igneous node; only the igneous cookie
-///   refresh Dio uses it.
+/// The core exposes one loopback SOCKS inbound, [mainPort], routed to the
+/// main node; [findProxySettingFunc] points all normal traffic here when
+/// the proxy type is xray. (The former second inbound for a dedicated
+/// igneous node is gone — the igneous cookie now refreshes through an API,
+/// see IgneousRefreshService.)
 ///
-/// Ports default to 23366/23367 and are resolved once per process: when a
-/// default port is already occupied, a random free port takes its place
-/// (see [ensurePortsResolved]). Consumers must always read [mainAddress] /
-/// [igneousAddress] instead of hardcoding a port.
+/// The port defaults to 23366 and is resolved once per process: when the
+/// default is already occupied, a random free port takes its place (see
+/// [ensurePortsResolved]). Consumers must always read [mainAddress]
+/// instead of hardcoding a port.
 ///
 /// Extra duties: keeping the WebView proxy override in sync with the app
-/// proxy setting (Android only), cron-based subscription auto-refresh, and
-/// main-node failover (the igneous node never fails over).
+/// proxy setting (Android only), and main-node failover.
 ///
 /// On platforms other than Android and Windows every method is a no-op.
 class XrayService with JHLifeCircleBeanErrorCatch implements JHLifeCircleBean {
@@ -54,34 +53,28 @@ class XrayService with JHLifeCircleBeanErrorCatch implements JHLifeCircleBean {
       MethodChannel('top.jtmonster.jhentai.xray');
 
   static const int defaultMainPort = 23366;
-  static const int defaultIgneousPort = 23367;
 
   static int _mainPort = defaultMainPort;
-  static int _igneousPort = defaultIgneousPort;
   static bool _portsResolved = false;
 
   static int get mainPort => _mainPort;
-  static int get igneousPort => _igneousPort;
   static String get mainAddress => '127.0.0.1:$_mainPort';
-  static String get igneousAddress => '127.0.0.1:$_igneousPort';
 
-  /// Picks the loopback ports for this process: the defaults when they are
-  /// free, a random free port for each one that is already occupied.
+  /// Picks the loopback port for this process: the default when it is
+  /// free, a random free port when it is already occupied.
   static Future<void> ensurePortsResolved() async {
     if (_portsResolved) {
       return;
     }
     _portsResolved = true;
     _mainPort = await _resolvePort(defaultMainPort);
-    _igneousPort = await _resolvePort(defaultIgneousPort, avoid: _mainPort);
-    if (_mainPort != defaultMainPort || _igneousPort != defaultIgneousPort) {
-      log.info(
-          'Xray default port occupied, using main=$_mainPort igneous=$_igneousPort');
+    if (_mainPort != defaultMainPort) {
+      log.info('Xray default port occupied, using main=$_mainPort');
     }
   }
 
-  static Future<int> _resolvePort(int preferred, {int? avoid}) async {
-    if (preferred != avoid && await _isPortFree(preferred)) {
+  static Future<int> _resolvePort(int preferred) async {
+    if (await _isPortFree(preferred)) {
       return preferred;
     }
     try {
@@ -118,7 +111,6 @@ class XrayService with JHLifeCircleBeanErrorCatch implements JHLifeCircleBean {
 
   bool _started = false;
   String? _startedMainLink;
-  String? _startedIgneousLink;
   Future<void> _syncQueue = Future.value();
 
   // Failover state.
@@ -126,11 +118,6 @@ class XrayService with JHLifeCircleBeanErrorCatch implements JHLifeCircleBean {
   int _consecutiveHealthFailures = 0;
   DateTime? _coreStartedAt;
   bool _healthCheckInFlight = false;
-
-  // Cron auto-refresh state.
-  Timer? _cronTimer;
-  final Set<String> _cronRanKeys = {};
-  final Map<String, CronExpression?> _cronCache = {};
 
   @override
   List<JHLifeCircleBean> get initDependencies =>
@@ -147,7 +134,6 @@ class XrayService with JHLifeCircleBeanErrorCatch implements JHLifeCircleBean {
 
     ever(networkSetting.proxyType, (_) => _scheduleSync());
     ever(xraySetting.mainNodeIndex, (_) => _scheduleSync());
-    ever(xraySetting.igneousNodeIndex, (_) => _scheduleSync());
     ever(xraySetting.nodes, (_) => _scheduleSync());
 
     // WebView does not use the app HttpClient proxy: keep its process-wide
@@ -164,10 +150,6 @@ class XrayService with JHLifeCircleBeanErrorCatch implements JHLifeCircleBean {
     _healthTimer?.cancel();
     _healthTimer =
         Timer.periodic(const Duration(seconds: 30), (_) => _healthCheckTick());
-    _cronTimer?.cancel();
-    _cronTimer =
-        Timer.periodic(const Duration(seconds: 30), (_) => _cronTick());
-    _cronTick();
   }
 
   void _scheduleSync() {
@@ -228,16 +210,13 @@ class XrayService with JHLifeCircleBeanErrorCatch implements JHLifeCircleBean {
     }
 
     String? mainLink = xraySetting.mainNode?.link;
-    String? igneousLink = xraySetting.igneousNode?.link;
-    if (_started &&
-        _startedMainLink == mainLink &&
-        _startedIgneousLink == igneousLink) {
+    if (_started && _startedMainLink == mainLink) {
       return;
     }
-    await start(mainLink: mainLink, igneousLink: igneousLink);
+    await start(mainLink: mainLink);
   }
 
-  Future<void> start({String? mainLink, String? igneousLink}) async {
+  Future<void> start({String? mainLink}) async {
     if (!isSupported) {
       return;
     }
@@ -248,27 +227,21 @@ class XrayService with JHLifeCircleBeanErrorCatch implements JHLifeCircleBean {
       if (Platform.isWindows) {
         await XrayWindowsBridge.start(
           mainLink: mainLink,
-          igneousLink: igneousLink,
           mainPort: mainPort,
-          igneousPort: igneousPort,
         );
       } else {
         await _channel.invokeMethod('start', {
           'mainLink': mainLink,
-          'igneousLink': igneousLink,
           'mainPort': mainPort,
-          'igneousPort': igneousPort,
         });
       }
       _started = true;
       _startedMainLink = mainLink;
-      _startedIgneousLink = igneousLink;
       running.value = true;
       status.value = 'running';
       _coreStartedAt = DateTime.now();
       _consecutiveHealthFailures = 0;
-      log.info(
-          'Xray core started (main: ${mainLink != null}, igneous: ${igneousLink != null})');
+      log.info('Xray core started (main: ${mainLink != null})');
     } catch (e, stack) {
       running.value = false;
       status.value = 'error: $e';
@@ -292,7 +265,6 @@ class XrayService with JHLifeCircleBeanErrorCatch implements JHLifeCircleBean {
     }
     _started = false;
     _startedMainLink = null;
-    _startedIgneousLink = null;
     running.value = false;
     status.value = 'stopped';
     _coreStartedAt = null;
@@ -415,7 +387,7 @@ class XrayService with JHLifeCircleBeanErrorCatch implements JHLifeCircleBean {
   }
 
   // ------------------------------------------------------------------
-  // Main node failover (igneous never participates)
+  // Main node failover / manual switch
   // ------------------------------------------------------------------
 
   Future<void> _healthCheckTick() async {
@@ -473,25 +445,54 @@ class XrayService with JHLifeCircleBeanErrorCatch implements JHLifeCircleBean {
     }
   }
 
-  Future<void> _failoverMainNode() async {
+  /// Switches the main node to the next one in the list and waits until
+  /// the restarted core accepts connections again. Returns the new node's
+  /// display name, or null when no switch is possible (xray unsupported,
+  /// no main node selected, or fewer than two nodes).
+  Future<String?> switchToNextMainNode() async {
     int current = xraySetting.mainNodeIndex.value;
     int count = xraySetting.nodes.length;
-    if (current < 0 || count < 2) {
-      return;
+    if (!isSupported || current < 0 || count < 2) {
+      return null;
     }
     int next = (current + 1) % count;
     XrayNode node = xraySetting.nodes[next];
+    String displayName = node.name.isEmpty ? node.link : node.name;
     log.info(
-        'Xray main node failover: ${xraySetting.nodes[current].name} -> ${node.name}');
-    _consecutiveHealthFailures = 0;
-    failoverNote.value =
-        'xrayFailoverTo'.trParams({'name': node.name.isEmpty ? node.link : node.name});
-    // The ever() listener on mainNodeIndex restarts the core with the new node.
+        'Xray main node switch: ${xraySetting.nodes[current].name} -> ${node.name}');
+    failoverNote.value = 'xrayFailoverTo'.trParams({'name': displayName});
+    // The ever() listener on mainNodeIndex restarts the core with the new
+    // node; give that restart a head start, drain the sync queue, then
+    // wait until the new inbound actually accepts connections.
     await xraySetting.saveMainNodeIndex(next);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    await _syncQueue;
+    if (running.value) {
+      await _waitForMainInbound();
+    }
+    return displayName;
+  }
+
+  Future<void> _failoverMainNode() async {
+    int current = xraySetting.mainNodeIndex.value;
+    if (current < 0 || xraySetting.nodes.length < 2) {
+      return;
+    }
+    String fromName = xraySetting.nodes[current].name;
+    _consecutiveHealthFailures = 0;
+    String? switchedTo = await switchToNextMainNode();
+    if (switchedTo == null) {
+      return;
+    }
+    log.info('Xray main node failover: $fromName -> $switchedTo');
+    // Automatic failover must not happen silently: tell the user.
+    toast('xrayFailoverTo'.trParams({'name': switchedTo}),
+        isCenter: false, isShort: false);
   }
 
   // ------------------------------------------------------------------
-  // Subscriptions: manual + cron refresh
+  // Subscriptions: manual refresh only (the cron auto-refresh mechanism
+  // was removed — it proved impractical)
   // ------------------------------------------------------------------
 
   /// Fetches and converts a subscription, replacing its whole node group.
@@ -553,56 +554,4 @@ class XrayService with JHLifeCircleBeanErrorCatch implements JHLifeCircleBean {
     }
   }
 
-  void _cronTick() {
-    if (!isSupported) {
-      return;
-    }
-    DateTime now = DateTime.now();
-    if (_cronRanKeys.length > 500) {
-      _cronRanKeys.clear();
-    }
-    for (XraySubscription sub in xraySetting.subscriptions) {
-      String cron = sub.cron.trim();
-      if (cron.isEmpty) {
-        continue;
-      }
-      String cacheKey = '${sub.id}|$cron';
-      CronExpression? expression;
-      if (_cronCache.containsKey(cacheKey)) {
-        expression = _cronCache[cacheKey];
-      } else {
-        expression = CronExpression.tryParse(cron);
-        _cronCache[cacheKey] = expression;
-        if (expression == null) {
-          log.error('Invalid cron expression for ${sub.name}: $cron');
-        }
-      }
-      if (expression == null || !expression.matches(now)) {
-        continue;
-      }
-      String ranKey =
-          '${sub.id}@${now.year}-${now.month}-${now.day}-${now.hour}-${now.minute}';
-      if (_cronRanKeys.contains(ranKey)) {
-        continue;
-      }
-      // Also guard against a restart landing inside the same minute after a
-      // successful run.
-      if (sub.lastUpdatedMs > 0) {
-        DateTime last = DateTime.fromMillisecondsSinceEpoch(sub.lastUpdatedMs);
-        if (last.year == now.year &&
-            last.month == now.month &&
-            last.day == now.day &&
-            last.hour == now.hour &&
-            last.minute == now.minute) {
-          _cronRanKeys.add(ranKey);
-          continue;
-        }
-      }
-      _cronRanKeys.add(ranKey);
-      log.info('Cron refresh subscription: ${sub.name}');
-      unawaited(refreshSubscription(sub).catchError((Object e) {
-        log.error('Cron refresh subscription ${sub.name} failed: $e');
-      }));
-    }
-  }
 }

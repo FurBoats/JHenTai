@@ -4,6 +4,11 @@ enum CloudConfigTypeEnum {
   blockRules(3, 'blockRules'),
   searchHistory(4, 'searchHistory'),
   history(5, 'galleryHistory'),
+
+  /// Full app-data bundle (account, settings, Xray nodes, history) as a
+  /// zip. Not a CloudConfig payload: the advanced settings page handles
+  /// this selection specially in the export/import flows.
+  appData(6, 'appData'),
   ;
 
   final int code;
@@ -24,6 +29,8 @@ enum CloudConfigTypeEnum {
         return CloudConfigTypeEnum.searchHistory;
       case 5:
         return CloudConfigTypeEnum.history;
+      case 6:
+        return CloudConfigTypeEnum.appData;
       default:
         throw Exception('Unknown CloudConfigTypeEnum code: $code');
     }

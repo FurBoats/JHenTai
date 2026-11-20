@@ -102,6 +102,18 @@ class zh_TW {
       'parse': '解析',
       'igneousHint': 'igneous（裡站必帶）',
       'refreshIgneousFailed': '重新整理Igneous失敗',
+      'autoRefreshIgneous': '自動刷新Igneous',
+      'autoRefreshIgneousHint': '遇到Sad Panda時自動刷新igneous；連續失敗5次將自動關閉',
+      'autoRefreshIgneousDisabled': '自動刷新Igneous連續失敗5次，已自動關閉',
+      'longPress2SwitchIgneousRefreshMode': '長按以切換刷新模式',
+      'refreshIgneousViaApi': '通過接口刷新Igneous',
+      'igneousRefreshApiUrl': '接口地址',
+      'igneousRefreshApiWarning': '若開啟此功能，你的帳號登入憑證會被傳送到@url第三方接口，請確保你信任此接口再繼續',
+      'continue': '繼續',
+      'ipBannedNodeSwitched': '目前節點IP已被暫時封禁，已切換到@name並重新載入',
+      'appData': '完整應用資料',
+      'forkRepo': '二開地址',
+      'forkRepoHint': '本項目基於原作者的JHenTai二次開發',
 
       /// request
       'sadPanda': 'Sad Panda(無響應資料). 解決參考Github Wiki: https://github.com/jiangtian616/JHenTai/wiki/%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98',

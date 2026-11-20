@@ -19,6 +19,7 @@ class _SettingAboutPageState extends State<SettingAboutPage> {
   String author = '酱天小禽兽(JTMonster)';
   String telegram = 'https://t.me/+PindoE9yvIpmOWI9';
   String gitRepo = 'https://github.com/jiangtian616/JHenTai';
+  String forkRepo = 'https://github.com/FurBoats/JHenTai';
   String helpPage = 'https://github.com/jiangtian616/JHenTai/wiki';
 
   @override
@@ -47,6 +48,11 @@ class _SettingAboutPageState extends State<SettingAboutPage> {
             title: const Text('Github'),
             subtitle: SelectableText(gitRepo),
             onTap: () => launchUrlString(gitRepo, mode: LaunchMode.externalApplication),
+          ),
+          ListTile(
+            title: Text('forkRepo'.tr),
+            subtitle: SelectableText('forkRepoHint'.tr + '\n' + forkRepo),
+            onTap: () => launchUrlString(forkRepo, mode: LaunchMode.externalApplication),
           ),
           ListTile(
             title: const Text('Telegram(Chinese Mainly)'),

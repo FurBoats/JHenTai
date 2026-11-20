@@ -47,9 +47,6 @@ class _SettingAdvancedPageState extends State<SettingAdvancedPage> {
   LoadingState _exportDataLoadingState = LoadingState.idle;
   LoadingState _importDataLoadingState = LoadingState.idle;
 
-  LoadingState _exportAppDataLoadingState = LoadingState.idle;
-  LoadingState _importAppDataLoadingState = LoadingState.idle;
-
   @override
   void initState() {
     super.initState();
@@ -78,10 +75,9 @@ class _SettingAdvancedPageState extends State<SettingAdvancedPage> {
             if (GetPlatform.isAndroid) _buildVerifyAppLinks(),
             if (GetPlatform.isAndroid) _buildRefreshRate(),
             _buildInNoImageMode(),
+            _buildAutoRefreshIgneous(),
             _buildImportData(context),
             _buildExportData(context),
-            _buildImportAppData(context),
-            _buildExportAppData(context),
           ],
         ).withListTileTheme(context),
       ),
@@ -228,6 +224,15 @@ class _SettingAdvancedPageState extends State<SettingAdvancedPage> {
     );
   }
 
+  Widget _buildAutoRefreshIgneous() {
+    return SwitchListTile(
+      title: Text('autoRefreshIgneous'.tr),
+      subtitle: Text('autoRefreshIgneousHint'.tr),
+      value: advancedSetting.autoRefreshIgneous.value,
+      onChanged: advancedSetting.saveAutoRefreshIgneous,
+    );
+  }
+
   Widget _buildImportData(BuildContext context) {
     return ListTile(
       title: Text('importData'.tr),
@@ -266,51 +271,13 @@ class _SettingAdvancedPageState extends State<SettingAdvancedPage> {
     );
   }
 
-  Widget _buildImportAppData(BuildContext context) {
-    return ListTile(
-      title: Text('importAppData'.tr),
-      subtitle: Text('importAppDataHint'.tr),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          LoadingStateIndicator(
-            loadingState: _importAppDataLoadingState,
-            idleWidgetBuilder: () => const Icon(Icons.keyboard_arrow_right),
-            successWidgetSameWithIdle: true,
-            useCupertinoIndicator: true,
-            errorWidgetSameWithIdle: true,
-          ).marginOnly(right: 8)
-        ],
-      ),
-      onTap: () => _importAppData(context),
-    );
-  }
-
-  Widget _buildExportAppData(BuildContext context) {
-    return ListTile(
-      title: Text('exportAppData'.tr),
-      subtitle: Text('exportAppDataHint'.tr),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          LoadingStateIndicator(
-            loadingState: _exportAppDataLoadingState,
-            idleWidgetBuilder: () => const Icon(Icons.keyboard_arrow_right),
-            successWidgetSameWithIdle: true,
-            useCupertinoIndicator: true,
-            errorWidgetSameWithIdle: true,
-          ).marginOnly(right: 8)
-        ],
-      ),
-      onTap: () => _exportAppData(context),
-    );
-  }
-
-  Future<void> _exportAppData(BuildContext context) async {
-    if (_exportAppDataLoadingState == LoadingState.loading) {
+  /// The full app-data zip, exported when the user checks the appData
+  /// item in the (original) export-data selection dialog.
+  Future<void> _exportAppDataZip() async {
+    if (_exportDataLoadingState == LoadingState.loading) {
       return;
     }
-    setStateSafely(() => _exportAppDataLoadingState = LoadingState.loading);
+    setStateSafely(() => _exportDataLoadingState = LoadingState.loading);
 
     try {
       var bytes = await AppDataTransferService.exportAppData(
@@ -341,53 +308,40 @@ class _SettingAdvancedPageState extends State<SettingAdvancedPage> {
       if (savedPath != null) {
         log.info('Export app data to $savedPath success');
         toast('success'.tr);
-        setStateSafely(() => _exportAppDataLoadingState = LoadingState.success);
+        setStateSafely(() => _exportDataLoadingState = LoadingState.success);
       } else {
-        setStateSafely(() => _exportAppDataLoadingState = LoadingState.idle);
+        setStateSafely(() => _exportDataLoadingState = LoadingState.idle);
       }
     } on Exception catch (e) {
       log.error('Export app data failed', e);
       toast('internalError'.tr);
-      setStateSafely(() => _exportAppDataLoadingState = LoadingState.error);
+      setStateSafely(() => _exportDataLoadingState = LoadingState.error);
     }
   }
 
-  Future<void> _importAppData(BuildContext context) async {
-    FilePickerResult? result;
-    try {
-      result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['zip'],
-        allowCompression: false,
-        compressionQuality: 0,
-      );
-    } on Exception catch (e) {
-      log.error('Pick import app data file failed', e);
+  /// Stages a full app-data zip picked through the (original)
+  /// import-data flow, then closes the app so the bundle is swapped in
+  /// before the database opens on next launch.
+  Future<void> _importAppDataZip(String zipPath) async {
+    if (_importDataLoadingState == LoadingState.loading) {
       return;
     }
 
-    if (result == null || result.files.first.path == null) {
-      return;
-    }
-    if (_importAppDataLoadingState == LoadingState.loading) {
-      return;
-    }
-
-    log.info('Import app data from ${result.files.first.path}');
-    setStateSafely(() => _importAppDataLoadingState = LoadingState.loading);
+    log.info('Import app data from $zipPath');
+    setStateSafely(() => _importDataLoadingState = LoadingState.loading);
 
     try {
-      List<int> bytes = await File(result.files.first.path!).readAsBytes();
+      List<int> bytes = await File(zipPath).readAsBytes();
       bool staged = await AppDataTransferService.stageImport(
         visibleDirPath: pathService.getVisibleDir().path,
         zipBytes: bytes,
       );
       if (!staged) {
         toast('internalError'.tr);
-        setStateSafely(() => _importAppDataLoadingState = LoadingState.error);
+        setStateSafely(() => _importDataLoadingState = LoadingState.error);
         return;
       }
-      setStateSafely(() => _importAppDataLoadingState = LoadingState.success);
+      setStateSafely(() => _importDataLoadingState = LoadingState.success);
       toast('importAppDataSuccessHint'.tr);
 
       // The staged bundle is swapped in at the next startup, before the
@@ -402,7 +356,7 @@ class _SettingAdvancedPageState extends State<SettingAdvancedPage> {
     } catch (e, s) {
       log.error('Import app data failed', e, s);
       toast('internalError'.tr);
-      setStateSafely(() => _importAppDataLoadingState = LoadingState.error);
+      setStateSafely(() => _importDataLoadingState = LoadingState.error);
     }
   }
 
@@ -485,7 +439,7 @@ class _SettingAdvancedPageState extends State<SettingAdvancedPage> {
     try {
       result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['json'],
+        allowedExtensions: ['json', 'zip'],
         allowCompression: false,
         compressionQuality: 0,
       );
@@ -502,10 +456,15 @@ class _SettingAdvancedPageState extends State<SettingAdvancedPage> {
       return;
     }
 
-    log.info('Import data from ${result.files.first.path}');
+    String pickedPath = result.files.first.path!;
+    if (pickedPath.toLowerCase().endsWith('.zip')) {
+      return _importAppDataZip(pickedPath);
+    }
+
+    log.info('Import data from $pickedPath');
     setStateSafely(() => _importDataLoadingState = LoadingState.loading);
 
-    File file = File(result.files.first.path!);
+    File file = File(pickedPath);
     String string = await file.readAsString();
 
     try {
@@ -534,11 +493,24 @@ class _SettingAdvancedPageState extends State<SettingAdvancedPage> {
       return;
     }
 
+    // The full app-data bundle is a zip of its own, handled by the
+    // transfer service; the remaining items keep the original JSON flow.
+    bool wantsAppData = result!.contains(CloudConfigTypeEnum.appData);
+    List<CloudConfigTypeEnum> configTypes =
+        result.where((e) => e != CloudConfigTypeEnum.appData).toList();
+
+    if (wantsAppData) {
+      await _exportAppDataZip();
+    }
+    if (configTypes.isEmpty) {
+      return;
+    }
+
     String fileName = '${CloudConfigService.configFileName}-${DateFormat('yyyyMMddHHmmss').format(DateTime.now())}.json';
     if (GetPlatform.isMobile) {
-      return _exportDataMobile(fileName, result);
+      return _exportDataMobile(fileName, configTypes);
     } else {
-      return _exportDataDesktop(fileName, result);
+      return _exportDataDesktop(fileName, configTypes);
     }
   }
 

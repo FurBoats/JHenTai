@@ -992,20 +992,21 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
       _emitEHExceptionIfFailed(response);
     } on EHSiteException catch (e) {
       removeCacheByUrl(response.requestOptions.uri.toString());
-      Response? retryResponse = await _retryAfterIgneousRefreshIfSadPanda(
-        e,
-        () async {
-          Response r = await _dio.get(
-            url,
-            queryParameters: queryParameters,
-            options: options,
-            cancelToken: cancelToken,
-            onReceiveProgress: onReceiveProgress,
-          );
-          _emitEHExceptionIfFailed(r);
-          return r;
-        },
-      );
+      Future<Response> doRetry() async {
+        Response r = await _dio.get(
+          url,
+          queryParameters: queryParameters,
+          options: options,
+          cancelToken: cancelToken,
+          onReceiveProgress: onReceiveProgress,
+        );
+        _emitEHExceptionIfFailed(r);
+        return r;
+      }
+
+      Response? retryResponse =
+          await _retryAfterIgneousRefreshIfSadPanda(e, doRetry);
+      retryResponse ??= await _retryAfterNodeSwitchIfBanned(e, doRetry);
       if (retryResponse == null) {
         rethrow;
       }
@@ -1042,22 +1043,23 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
     try {
       _emitEHExceptionIfFailed(response);
     } on EHSiteException catch (e) {
-      Response? retryResponse = await _retryAfterIgneousRefreshIfSadPanda(
-        e,
-        () async {
-          Response r = await _dio.post(
-            url,
-            data: data,
-            queryParameters: queryParameters,
-            options: options,
-            cancelToken: cancelToken,
-            onSendProgress: onSendProgress,
-            onReceiveProgress: onReceiveProgress,
-          );
-          _emitEHExceptionIfFailed(r);
-          return r;
-        },
-      );
+      Future<Response> doRetry() async {
+        Response r = await _dio.post(
+          url,
+          data: data,
+          queryParameters: queryParameters,
+          options: options,
+          cancelToken: cancelToken,
+          onSendProgress: onSendProgress,
+          onReceiveProgress: onReceiveProgress,
+        );
+        _emitEHExceptionIfFailed(r);
+        return r;
+      }
+
+      Response? retryResponse =
+          await _retryAfterIgneousRefreshIfSadPanda(e, doRetry);
+      retryResponse ??= await _retryAfterNodeSwitchIfBanned(e, doRetry);
       if (retryResponse == null) {
         rethrow;
       }
@@ -1088,14 +1090,51 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
       return null;
     }
 
-    _toastSadPandaRefreshing();
     IgneousRefreshResult result =
         await igneousRefreshService.refreshForSadPanda();
+    if (result.skipped && !result.success) {
+      // Automatic refresh is off (disabled by the user, or auto-disabled
+      // after repeated failures): stay silent and let the caller surface
+      // the original Sad Panda.
+      return null;
+    }
     if (!result.success) {
       toast('sadPandaAutoRefreshFailed'.tr, isCenter: false, isShort: false);
       return null;
     }
+    _toastSadPandaRefreshing();
     log.info('Igneous refreshed after Sad Panda, reloading request once');
+    try {
+      return await retry();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// In xray mode, a "this IP is temporarily banned" response means the
+  /// current node's egress IP is burned. Switch the main node to the next
+  /// one, tell the user, and reload the request exactly once. Returns null
+  /// when no retry applies (other exception types, not in xray mode, no
+  /// alternative node, or the reload itself failed) — the caller then
+  /// rethrows the original exception.
+  Future<Response?> _retryAfterNodeSwitchIfBanned(
+    EHSiteException exception,
+    Future<Response> Function() retry,
+  ) async {
+    if (exception.type != EHSiteExceptionType.banned) {
+      return null;
+    }
+    if (networkSetting.proxyType.value != JProxyType.xray) {
+      return null;
+    }
+
+    String? switchedTo = await xrayService.switchToNextMainNode();
+    if (switchedTo == null) {
+      return null;
+    }
+    log.info('IP banned, switched main node to $switchedTo, reloading request once');
+    toast('ipBannedNodeSwitched'.trParams({'name': switchedTo}),
+        isCenter: false, isShort: false);
     try {
       return await retry();
     } catch (_) {

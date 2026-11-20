@@ -102,6 +102,18 @@ class ko_KR {
       'parse': 'parse',
       'igneousHint': 'igneous(EX required)',
       'refreshIgneousFailed': 'Refresh Igneous Failed',
+      'autoRefreshIgneous': 'Igneous 자동 새로고침',
+      'autoRefreshIgneousHint': 'Sad Panda 발생 시 igneous를 자동으로 새로고침합니다. 5회 연속 실패하면 자동으로 꺼집니다',
+      'autoRefreshIgneousDisabled': 'Igneous 자동 새로고침이 5회 연속 실패하여 자동으로 꺼졌습니다',
+      'longPress2SwitchIgneousRefreshMode': '길게 눌러 새로고침 모드 전환',
+      'refreshIgneousViaApi': 'API로 Igneous 새로고침',
+      'igneousRefreshApiUrl': 'API 주소',
+      'igneousRefreshApiWarning': '이 기능을 켜면 계정 로그인 자격 증명이 @url 타사 엔드포인트로 전송됩니다. 계속하기 전에 해당 엔드포인트를 신뢰할 수 있는지 확인하세요.',
+      'continue': '계속',
+      'ipBannedNodeSwitched': '현재 노드의 IP가 일시적으로 차단되어 @name(으)로 전환하고 다시 불러옵니다',
+      'appData': '전체 앱 데이터',
+      'forkRepo': '포크 저장소',
+      'forkRepoHint': '이 프로젝트는 원본 JHenTai의 2차 개발 포크입니다',
 
       /// request
       'sadPanda': 'Sad Panda(no data). Refer: https://github.com/jiangtian616/JHenTai/wiki/%EC%9E%90%EC%A3%BC-%ED%95%98%EB%8A%94-%EC%A7%88%EB%AC%B8',
