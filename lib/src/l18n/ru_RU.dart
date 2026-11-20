@@ -114,6 +114,7 @@ class ru_RU {
       'appData': 'Полные данные приложения',
       'forkRepo': 'Форк-репозиторий',
       'forkRepoHint': 'Этот проект — форк вторичной разработки оригинального JHenTai',
+      'emptyValue': 'Пусто',
 
       /// request
       'sadPanda': 'Sad Panda (нет данных). См.: https://github.com/jiangtian616/JHenTai/wiki/Common-Questions',

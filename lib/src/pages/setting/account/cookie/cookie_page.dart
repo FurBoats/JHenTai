@@ -28,6 +28,13 @@ class _CookiePageState extends State<CookiePage> {
 
   @override
   Widget build(BuildContext context) {
+    // The igneous row must always be visible: it carries the refresh
+    // button and the long-press refresh-mode dialog. When no igneous
+    // cookie is stored yet, show a placeholder row with an empty value.
+    List<Cookie> displayCookies = [...ehRequest.cookies];
+    if (!displayCookies.any((cookie) => cookie.name == EHConsts.igneousCookieName)) {
+      displayCookies.add(Cookie(EHConsts.igneousCookieName, ''));
+    }
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
@@ -38,7 +45,7 @@ class _CookiePageState extends State<CookiePage> {
       ),
       body: ListView(
         padding: const EdgeInsets.only(top: 12),
-        children: ehRequest.cookies
+        children: displayCookies
             .map(
               (cookie) => ListTile(
                 title: Text(cookie.name),
@@ -46,7 +53,7 @@ class _CookiePageState extends State<CookiePage> {
                     ? Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(cookie.value),
+                          Text(cookie.value.isEmpty ? 'emptyValue'.tr : cookie.value),
                           const SizedBox(height: 2),
                           Text(
                             'longPress2SwitchIgneousRefreshMode'.tr,

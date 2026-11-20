@@ -58,15 +58,18 @@ Filename: "{app}\{#MyAppExeName}"; Description: "启动 {#MyAppName}"; Flags: no
 [Code]
 const
   UninstallRegKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{6F3A9C24-1B7E-4D05-9A82-3E5F7C1D90AB}_is1';
-  { The app's own data folder (settings, account, default downloads), as
-    computed by path_provider from the runner's CompanyName/ProductName.
+  { The app's own data folder (settings, account, and the default
+    download folder as a subfolder named download), as computed by
+    path_provider from the runner's CompanyName/ProductName.
     This fixed suffix is the ONLY thing uninstall data-erasure may touch. }
   AppDataSuffix = 'top.jtmonster\jhentai';
+  { Name of the download subfolder inside the data folder. Uninstall
+    erasure always keeps this one; everything else in the data folder
+    is removed. }
+  DownloadDirName = 'download';
 
 var
   ExistingVersion: String;
-  UninstallEraseData: Boolean;
-  EraseDataCheckBox: TNewCheckBox;
 
 function GetExistingVersion: String;
 var
@@ -112,50 +115,16 @@ begin
   Result := S;
 end;
 
-{ Uninstall: the "erase app data" checkbox lives on the uninstall
-  progress form (only added when the data folder actually exists). It
-  starts unchecked, so data survives unless the user actively opts in;
-  the choice is acted on in CurUninstallStepChanged. }
-function InitializeUninstall: Boolean;
-begin
-  Result := True;
-  UninstallEraseData := False;
-end;
-
-procedure InitializeUninstallProgressForm;
+{ Uninstall always erases the app data (settings, account, caches)
+  with no prompt and no opt-out — except the downloads, which are
+  kept: the download subfolder inside the data folder is left
+  untouched, and a download folder the user picked elsewhere is
+  outside the data folder and never touched at all. }
+procedure EraseAppDataExceptDownloads;
 var
-  DataDir: String;
+  DataDir, AppDir, UserAppData, Entry: String;
+  FindRec: TFindRec;
 begin
-  DataDir := ExpandConstant('{userappdata}\' + AppDataSuffix);
-  if not DirExists(DataDir) then
-    exit;
-
-  UninstallProgressForm.ClientHeight :=
-    UninstallProgressForm.ClientHeight + ScaleY(30);
-
-  EraseDataCheckBox := TNewCheckBox.Create(UninstallProgressForm);
-  EraseDataCheckBox.Parent := UninstallProgressForm;
-  EraseDataCheckBox.Left := UninstallProgressForm.ProgressBar.Left;
-  EraseDataCheckBox.Top := UninstallProgressForm.ProgressBar.Top +
-    UninstallProgressForm.ProgressBar.Height + ScaleY(10);
-  EraseDataCheckBox.Width := UninstallProgressForm.ProgressBar.Width;
-  EraseDataCheckBox.Height := ScaleY(20);
-  EraseDataCheckBox.Caption := '擦除应用数据（设置、账号与默认下载内容）';
-  EraseDataCheckBox.Checked := False;
-end;
-
-
-procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
-var
-  DataDir, AppDir, UserAppData: String;
-begin
-  if CurUninstallStep <> usPostUninstall then
-    exit;
-  if Assigned(EraseDataCheckBox) then
-    UninstallEraseData := EraseDataCheckBox.Checked;
-  if not UninstallEraseData then
-    exit;
-
   UserAppData := RemoveBackslashUnlessRoot(ExpandConstant('{userappdata}'));
   DataDir := RemoveBackslashUnlessRoot(UserAppData + '\' + AppDataSuffix);
   AppDir := RemoveBackslashUnlessRoot(ExpandConstant('{app}'));
@@ -180,6 +149,34 @@ begin
   if Pos(Lowercase(DataDir) + '\', Lowercase(AppDir) + '\') = 1 then
     exit;
 
-  if DirExists(DataDir) then
-    DelTree(DataDir, True, True, True);
+  if not DirExists(DataDir) then
+    exit;
+
+  { Delete every entry directly inside the data folder except the
+    download subfolder. The data folder itself stays in place so the
+    kept downloads keep their path. }
+  if FindFirst(DataDir + '\*', FindRec) then
+  begin
+    try
+      repeat
+        if (FindRec.Name <> '.') and (FindRec.Name <> '..') and
+           (CompareText(FindRec.Name, DownloadDirName) <> 0) then
+        begin
+          Entry := DataDir + '\' + FindRec.Name;
+          if (FindRec.Attributes and faDirectory) <> 0 then
+            DelTree(Entry, True, True, True)
+          else
+            DeleteFile(Entry);
+        end;
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usPostUninstall then
+    EraseAppDataExceptDownloads;
 end;

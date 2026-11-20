@@ -114,6 +114,7 @@ class ko_KR {
       'appData': '전체 앱 데이터',
       'forkRepo': '포크 저장소',
       'forkRepoHint': '이 프로젝트는 원본 JHenTai의 2차 개발 포크입니다',
+      'emptyValue': '비어 있음',
 
       /// request
       'sadPanda': 'Sad Panda(no data). Refer: https://github.com/jiangtian616/JHenTai/wiki/%EC%9E%90%EC%A3%BC-%ED%95%98%EB%8A%94-%EC%A7%88%EB%AC%B8',

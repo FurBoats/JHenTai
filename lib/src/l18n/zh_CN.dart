@@ -114,6 +114,7 @@ class zh_CN {
       'appData': '完整应用数据',
       'forkRepo': '二开地址',
       'forkRepoHint': '本项目基于原作者的JHenTai二次开发',
+      'emptyValue': '空',
 
       /// request
       'sadPanda': 'Sad Panda(无响应数据). 解决参考Github Wiki: https://github.com/jiangtian616/JHenTai/wiki/%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98，如果你看得懂中文请不要到处截图询问。',

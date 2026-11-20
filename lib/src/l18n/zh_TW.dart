@@ -114,6 +114,7 @@ class zh_TW {
       'appData': '完整應用資料',
       'forkRepo': '二開地址',
       'forkRepoHint': '本項目基於原作者的JHenTai二次開發',
+      'emptyValue': '空',
 
       /// request
       'sadPanda': 'Sad Panda(無響應資料). 解決參考Github Wiki: https://github.com/jiangtian616/JHenTai/wiki/%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98',

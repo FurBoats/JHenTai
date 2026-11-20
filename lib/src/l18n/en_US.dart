@@ -114,6 +114,7 @@ class en_US {
       'appData': 'Full App Data',
       'forkRepo': 'Fork Repo',
       'forkRepoHint': 'This project is a secondary-development fork of the original JHenTai',
+      'emptyValue': 'Empty',
 
       /// request
       'sadPanda': 'Sad Panda(no data). Refer: https://github.com/jiangtian616/JHenTai/wiki/Common-Questions',

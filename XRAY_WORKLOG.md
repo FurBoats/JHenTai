@@ -173,3 +173,15 @@ direct refresh through the app proxy / main node) POSTs base cookies as JSON to 
   response is an IP-ban page (EHSiteExceptionType.banned), with a toast.
 - **Cron removed**: subscription cron auto-refresh deleted end to end
   (XrayService timer/tick, XraySubscription.cron, page UI, cron_util.dart).
+
+## 2026-11-20 (third batch): uninstall wipe, igneous row always visible
+
+- **Installer**: uninstall no longer offers the erase-data checkbox.
+  It now always wipes the per-user AppData data folder (settings,
+  account, caches) except the `download` subfolder, which keeps its
+  contents and path; the previous triple path-safety checks are
+  unchanged and still gate the deletion.
+- **Cookie page**: the igneous row is always rendered. When no igneous
+  cookie is stored, a placeholder row shows the value as "empty"
+  (l18n `emptyValue`), so the refresh button and the long-press
+  refresh-mode dialog stay reachable.
