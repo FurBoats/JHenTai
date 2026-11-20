@@ -24,6 +24,9 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={localappdata}\Programs\JHenTai
 DefaultGroupName={#MyAppName}
 PrivilegesRequired=lowest
+; OutputDir=. puts the finished installer next to this script; Inno's
+; default is an Output subfolder, and CI moves the exe from here.
+OutputDir=.
 OutputBaseFilename=JHenTai-{#MyAppVersion}-windows-setup
 Compression=lzma2
 SolidCompression=yes
