@@ -14,7 +14,7 @@ import 'package:path/path.dart' as p;
 /// the identical JSON-envelope invoke API through the C exports
 /// `CGoInvoke` / `CGoFree`. All bridge logic that lives in Kotlin on
 /// Android (share-link conversion, hysteria2 pin preprocessing, base64
-/// subscription decoding, dual-inbound config building) is ported here
+/// subscription decoding, single-inbound config building) is ported here
 /// one-to-one so both platforms behave the same.
 ///
 /// Every invoke call is blocking FFI into Go, so calls run in a short-lived
@@ -80,33 +80,26 @@ class XrayWindowsBridge {
   // Core lifecycle
   // --------------------------------------------------------------------
 
-  /// Validates and (re)starts the core with the dual-node config.
+  /// Validates and (re)starts the core with the single-node config.
   /// Empty link = direct (freedom outbound).
   static Future<void> start({
     String? mainLink,
-    String? igneousLink,
     required int mainPort,
-    required int igneousPort,
   }) async {
     Map<String, dynamic> mainOutbound = await _outboundFor(mainLink, 'out-main');
-    Map<String, dynamic> igneousOutbound =
-        await _outboundFor(igneousLink, 'out-igneous');
     Map<String, dynamic> config = {
       'log': {'loglevel': 'warning'},
       'inbounds': [
         _socksInbound('in-main', mainPort),
-        _socksInbound('in-igneous', igneousPort),
       ],
       'outbounds': [
         mainOutbound,
-        igneousOutbound,
         {'tag': 'direct', 'protocol': 'freedom'},
       ],
       'routing': {
         'domainStrategy': 'AsIs',
         'rules': [
           _routingRule('in-main', 'out-main'),
-          _routingRule('in-igneous', 'out-igneous'),
         ],
       },
     };

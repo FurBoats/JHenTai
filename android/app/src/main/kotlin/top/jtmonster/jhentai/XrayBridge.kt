@@ -13,10 +13,9 @@ import java.util.concurrent.Executor
 /**
  * The door into the embedded Xray core (libXray AAR, JSON-envelope invoke API).
  *
- * Two loopback SOCKS inbounds are exposed:
- *  - [mainPort] routes to the "main" outbound (all normal traffic)
- *  - [igneousPort] routes to the "igneous" outbound (only the exhentai igneous
- *    cookie refresh uses it)
+ * One loopback SOCKS inbound is exposed: [mainPort] routes to the "main"
+ * outbound (all traffic). (The former dedicated igneous inbound is gone —
+ * the igneous cookie now refreshes through an API on the Dart side.)
  *
  * Every invoke call is blocking JNI into Go: callers must stay off the main thread.
  * The only exception is [setWebViewProxy], which must run ON the main thread.
@@ -24,12 +23,11 @@ import java.util.concurrent.Executor
 object XrayBridge {
     private const val API_VERSION = 3
 
-    // Loopback SOCKS ports, chosen on the Dart side (XrayService): 23366 /
-    // 23367 by default, a random free port when a default is occupied.
-    // Dart passes the resolved ports with every start / setWebViewProxy
-    // call; the fallbacks here only cover a missing argument.
+    // Loopback SOCKS port, chosen on the Dart side (XrayService): 23366
+    // by default, a random free port when the default is occupied.
+    // Dart passes the resolved port with every start / setWebViewProxy
+    // call; the fallback here only covers a missing argument.
     var mainPort: Int = 23366
-    var igneousPort: Int = 23367
 
     private fun invoke(method: String, payload: JSONObject): JSONObject? {
         val request = JSONObject()
@@ -338,23 +336,20 @@ object XrayBridge {
             .put("outboundTag", outboundTag)
     }
 
-    /** Validates and (re)starts the core with the dual-node config. Empty link = direct (freedom). */
-    fun start(mainLink: String?, igneousLink: String?, mainPort: Int, igneousPort: Int) {
+    /** Validates and (re)starts the core with the single-node config. Empty link = direct (freedom). */
+    fun start(mainLink: String?, mainPort: Int) {
         this.mainPort = mainPort
-        this.igneousPort = igneousPort
         val config = JSONObject()
             .put("log", JSONObject().put("loglevel", "warning"))
             .put(
                 "inbounds",
                 JSONArray()
                     .put(socksInbound("in-main", mainPort))
-                    .put(socksInbound("in-igneous", igneousPort))
             )
             .put(
                 "outbounds",
                 JSONArray()
                     .put(outboundFor(mainLink, "out-main"))
-                    .put(outboundFor(igneousLink, "out-igneous"))
                     .put(JSONObject().put("tag", "direct").put("protocol", "freedom"))
             )
             .put(
@@ -365,7 +360,6 @@ object XrayBridge {
                         "rules",
                         JSONArray()
                             .put(routingRule("in-main", "out-main"))
-                            .put(routingRule("in-igneous", "out-igneous"))
                     )
             )
         val configJson = config.toString()

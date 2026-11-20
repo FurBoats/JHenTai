@@ -102,6 +102,18 @@ class ru_RU {
       'parse': 'Парсить',
       'igneousHint': 'igneous (требуется для EX)',
       'refreshIgneousFailed': 'Не удалось обновить Igneous',
+      'autoRefreshIgneous': 'Автообновление Igneous',
+      'autoRefreshIgneousHint': 'Автоматически обновлять igneous при Sad Panda; отключится после 5 неудач подряд',
+      'autoRefreshIgneousDisabled': 'Автообновление Igneous не удалось 5 раз подряд и было отключено',
+      'longPress2SwitchIgneousRefreshMode': 'Удерживайте, чтобы сменить режим обновления',
+      'refreshIgneousViaApi': 'Обновлять Igneous через API',
+      'igneousRefreshApiUrl': 'Адрес API',
+      'igneousRefreshApiWarning': 'Если включить эту функцию, ваши учётные данные будут отправлены стороннему эндпоинту @url. Убедитесь, что доверяете ему, прежде чем продолжить.',
+      'continue': 'Продолжить',
+      'ipBannedNodeSwitched': 'IP этого узла временно заблокирован. Переключено на @name, перезагрузка',
+      'appData': 'Полные данные приложения',
+      'forkRepo': 'Форк-репозиторий',
+      'forkRepoHint': 'Этот проект — форк вторичной разработки оригинального JHenTai',
 
       /// request
       'sadPanda': 'Sad Panda (нет данных). См.: https://github.com/jiangtian616/JHenTai/wiki/Common-Questions',

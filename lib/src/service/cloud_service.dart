@@ -23,6 +23,7 @@ class CloudConfigService with JHLifeCircleBeanErrorCatch implements JHLifeCircle
     CloudConfigTypeEnum.searchHistory: '1.0.0',
     CloudConfigTypeEnum.blockRules: '1.0.0',
     CloudConfigTypeEnum.history: '1.0.0',
+    CloudConfigTypeEnum.appData: '1.0.0',
   };
 
   static const int localConfigId = -1;
@@ -80,6 +81,10 @@ class CloudConfigService with JHLifeCircleBeanErrorCatch implements JHLifeCircle
         List<GalleryHistoryV2Data> histories = list.map((e) => GalleryHistoryV2Data.fromJson(e)).toList();
         await historyService.batchRecord(histories);
         break;
+      case CloudConfigTypeEnum.appData:
+        // Full app-data bundles are zip files handled by the advanced
+        // settings import flow; they never arrive as a CloudConfig.
+        break;
     }
   }
 
@@ -115,6 +120,9 @@ class CloudConfigService with JHLifeCircleBeanErrorCatch implements JHLifeCircle
         List<GalleryHistoryV2Data> histories = await historyService.getLatest10000RawHistory();
         configValue = await isolateService.jsonEncodeAsync(histories);
         break;
+      case CloudConfigTypeEnum.appData:
+        // Handled specially by the advanced settings export flow (zip).
+        return null;
     }
 
     return CloudConfig(

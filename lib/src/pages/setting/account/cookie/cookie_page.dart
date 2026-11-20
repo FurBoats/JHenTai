@@ -8,7 +8,9 @@ import 'package:jhentai/src/consts/eh_consts.dart';
 import 'package:jhentai/src/extension/widget_extension.dart';
 import 'package:jhentai/src/network/eh_request.dart';
 import 'package:jhentai/src/service/igneous_refresh_service.dart';
+import 'package:jhentai/src/setting/advanced_setting.dart';
 import 'package:jhentai/src/setting/user_setting.dart';
+import 'package:jhentai/src/utils/route_util.dart';
 import 'package:jhentai/src/utils/cookie_util.dart';
 import 'package:jhentai/src/utils/snack_util.dart';
 import 'package:jhentai/src/utils/toast_util.dart';
@@ -40,7 +42,19 @@ class _CookiePageState extends State<CookiePage> {
             .map(
               (cookie) => ListTile(
                 title: Text(cookie.name),
-                subtitle: Text(cookie.value),
+                subtitle: cookie.name == EHConsts.igneousCookieName
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(cookie.value),
+                          const SizedBox(height: 2),
+                          Text(
+                            'longPress2SwitchIgneousRefreshMode'.tr,
+                            style: TextStyle(fontSize: 11, color: Theme.of(context).hintColor),
+                          ),
+                        ],
+                      )
+                    : Text(cookie.value),
                 trailing: cookie.name == EHConsts.igneousCookieName
                     ? Row(
                         mainAxisSize: MainAxisSize.min,
@@ -56,6 +70,7 @@ class _CookiePageState extends State<CookiePage> {
                       )
                     : null,
                 onTap: () => _copyCookie(cookie),
+                onLongPress: cookie.name == EHConsts.igneousCookieName ? () => _showIgneousRefreshModeDialog(context) : null,
                 dense: true,
               ),
             )
@@ -80,6 +95,13 @@ class _CookiePageState extends State<CookiePage> {
       ),
     );
     toast('hasCopiedToClipboard'.tr);
+  }
+
+  Future<void> _showIgneousRefreshModeDialog(BuildContext context) async {
+    await showDialog(
+      context: context,
+      builder: (_) => const _IgneousRefreshModeDialog(),
+    );
   }
 
   Future<void> _refreshIgneousCookie() async {
@@ -110,5 +132,87 @@ class _CookiePageState extends State<CookiePage> {
     setStateSafely(() {
       _refreshIgneousState = LoadingState.error;
     });
+  }
+}
+
+
+/// Refresh-mode dialog for the igneous cookie: a switch for API mode and
+/// the API address. Confirming with the switch ON asks once more, because
+/// enabling it sends the account's login credentials to that endpoint.
+class _IgneousRefreshModeDialog extends StatefulWidget {
+  const _IgneousRefreshModeDialog();
+
+  @override
+  State<_IgneousRefreshModeDialog> createState() => _IgneousRefreshModeDialogState();
+}
+
+class _IgneousRefreshModeDialogState extends State<_IgneousRefreshModeDialog> {
+  late bool _useApi;
+  late final TextEditingController _urlController;
+
+  @override
+  void initState() {
+    super.initState();
+    _useApi = advancedSetting.useIgneousRefreshApi.value;
+    _urlController = TextEditingController(text: advancedSetting.igneousRefreshApiUrl.value);
+  }
+
+  @override
+  void dispose() {
+    _urlController.dispose();
+    super.dispose();
+  }
+
+  String get _url {
+    String url = _urlController.text.trim();
+    return url.isEmpty ? AdvancedSetting.defaultIgneousRefreshApiUrl : url;
+  }
+
+  Future<void> _onConfirm() async {
+    if (_useApi) {
+      bool? confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          content: Text('igneousRefreshApiWarning'.trParams({'url': _url})),
+          actions: [
+            TextButton(onPressed: () => backRoute(result: false), child: Text('cancel'.tr)),
+            TextButton(onPressed: () => backRoute(result: true), child: Text('continue'.tr)),
+          ],
+        ),
+      );
+      if (confirmed != true) {
+        return;
+      }
+    }
+    await advancedSetting.saveIgneousRefreshApi(useApi: _useApi, apiUrl: _url);
+    toast('success'.tr);
+    backRoute();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('refreshIgneousViaApi'.tr),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SwitchListTile(
+            title: Text('refreshIgneousViaApi'.tr),
+            value: _useApi,
+            onChanged: (value) => setState(() => _useApi = value),
+            contentPadding: EdgeInsets.zero,
+          ),
+          TextField(
+            controller: _urlController,
+            decoration: InputDecoration(hintText: 'igneousRefreshApiUrl'.tr, isDense: true),
+            keyboardType: TextInputType.url,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: backRoute, child: Text('cancel'.tr)),
+        TextButton(onPressed: _onConfirm, child: Text('OK'.tr)),
+      ],
+    );
   }
 }

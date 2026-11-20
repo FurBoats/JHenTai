@@ -53,9 +53,7 @@ class MainActivity : FlutterFragmentActivity() {
                         "start" -> {
                             XrayBridge.start(
                                 call.argument<String>("mainLink"),
-                                call.argument<String>("igneousLink"),
-                                call.argument<Int>("mainPort") ?: 23366,
-                                call.argument<Int>("igneousPort") ?: 23367
+                                call.argument<Int>("mainPort") ?: 23366
                             )
                             null
                         }

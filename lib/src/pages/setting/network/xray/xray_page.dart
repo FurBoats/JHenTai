@@ -5,7 +5,6 @@ import 'package:jhentai/src/extension/widget_extension.dart';
 import 'package:jhentai/src/service/log.dart';
 import 'package:jhentai/src/service/xray_service.dart';
 import 'package:jhentai/src/setting/xray_setting.dart';
-import 'package:jhentai/src/utils/cron_util.dart';
 import 'package:jhentai/src/utils/route_util.dart';
 import 'package:jhentai/src/utils/snack_util.dart';
 import 'package:jhentai/src/utils/toast_util.dart';
@@ -108,7 +107,6 @@ class _XrayPageState extends State<XrayPage> {
         children: [
           Text(sub.url, maxLines: 1, overflow: TextOverflow.ellipsis),
           Text('${'lastUpdated'.tr}: $lastUpdated'),
-          if (sub.cron.isNotEmpty) Text('Cron: ${sub.cron}'),
         ],
       ),
       trailing: Row(
@@ -175,7 +173,6 @@ class _XrayPageState extends State<XrayPage> {
         XraySubscription sub = await xraySetting.addSubscription(
           name: input.name,
           url: input.url,
-          cron: input.cron,
         );
         await _refreshSubscription(sub);
       },
@@ -232,7 +229,6 @@ class _XrayPageState extends State<XrayPage> {
   Widget _buildNodeTile(BuildContext context, int index) {
     XrayNode node = xraySetting.nodes[index];
     bool isMain = xraySetting.mainNodeIndex.value == index;
-    bool isIgneous = xraySetting.igneousNodeIndex.value == index;
 
     return ListTile(
       title: Text(node.name.isEmpty ? node.link : node.name,
@@ -241,20 +237,15 @@ class _XrayPageState extends State<XrayPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(node.link, maxLines: 1, overflow: TextOverflow.ellipsis),
-          if (isMain || isIgneous)
+          if (isMain)
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Wrap(
                 spacing: 6,
                 children: [
-                  if (isMain)
-                    Chip(
-                        label: Text('mainNode'.tr),
-                        visualDensity: VisualDensity.compact),
-                  if (isIgneous)
-                    Chip(
-                        label: Text('igneousNode'.tr),
-                        visualDensity: VisualDensity.compact),
+                  Chip(
+                      label: Text('mainNode'.tr),
+                      visualDensity: VisualDensity.compact),
                 ],
               ),
             ),
@@ -267,9 +258,6 @@ class _XrayPageState extends State<XrayPage> {
               xrayService.failoverNote.value = '';
               await xraySetting.saveMainNodeIndex(isMain ? -1 : index);
               break;
-            case 'igneous':
-              await xraySetting.saveIgneousNodeIndex(isIgneous ? -1 : index);
-              break;
             case 'delete':
               await xraySetting.removeNodeAt(index);
               toast('success'.tr);
@@ -278,7 +266,6 @@ class _XrayPageState extends State<XrayPage> {
         },
         itemBuilder: (context) => [
           PopupMenuItem(value: 'main', child: Text('setAsMainNode'.tr)),
-          PopupMenuItem(value: 'igneous', child: Text('setAsIgneousNode'.tr)),
           PopupMenuItem(value: 'delete', child: Text('delete'.tr)),
         ],
       ),
@@ -348,10 +335,8 @@ class _XrayPageState extends State<XrayPage> {
 class _SubscriptionInput {
   final String name;
   final String url;
-  final String cron;
 
-  const _SubscriptionInput(
-      {required this.name, required this.url, required this.cron});
+  const _SubscriptionInput({required this.name, required this.url});
 }
 
 class _SubscriptionInputDialog extends StatefulWidget {
@@ -365,13 +350,11 @@ class _SubscriptionInputDialog extends StatefulWidget {
 class _SubscriptionInputDialogState extends State<_SubscriptionInputDialog> {
   final TextEditingController nameController = TextEditingController();
   final TextEditingController urlController = TextEditingController();
-  final TextEditingController cronController = TextEditingController();
 
   @override
   void dispose() {
     nameController.dispose();
     urlController.dispose();
-    cronController.dispose();
     super.dispose();
   }
 
@@ -393,11 +376,6 @@ class _SubscriptionInputDialogState extends State<_SubscriptionInputDialog> {
             decoration:
                 InputDecoration(hintText: 'subscriptionUrl'.tr, isDense: true),
           ),
-          TextField(
-            controller: cronController,
-            decoration:
-                InputDecoration(hintText: 'subscriptionCron'.tr, isDense: true),
-          ),
         ],
       ),
       actions: [
@@ -406,17 +384,10 @@ class _SubscriptionInputDialogState extends State<_SubscriptionInputDialog> {
           onPressed: () {
             String name = nameController.text.trim();
             String url = urlController.text.trim();
-            String cron = cronController.text.trim();
             if (name.isEmpty || url.isEmpty) {
               return;
             }
-            if (cron.isNotEmpty && CronExpression.tryParse(cron) == null) {
-              snack('cronInvalid'.tr, cron);
-              return;
-            }
-            backRoute(
-                result:
-                    _SubscriptionInput(name: name, url: url, cron: cron));
+            backRoute(result: _SubscriptionInput(name: name, url: url));
           },
           child: Text('OK'.tr),
         ),

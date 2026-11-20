@@ -7,7 +7,7 @@ import 'package:dio/io.dart';
 import 'log.dart';
 import 'xray_service.dart';
 
-/// Subscription fetching shared by the node page and the cron auto-updater.
+/// Subscription fetching shared by the node page and the refresh flow.
 ///
 /// Some providers serve different (or no) content depending on the client
 /// User-Agent and on whether the request comes from a "clean" IP, so the

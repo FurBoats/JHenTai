@@ -134,3 +134,41 @@ every new release-notes/<tag>.md starts fresh.
   the staged DB's downloadSetting has its absolute path keys stripped so
   a bundle from another machine/install never imports foreign paths.
   Format is platform-independent: installer ⇄ portable ⇄ Android.
+
+## 2026-11-20 (second batch): igneous API refresh, single-node Xray
+
+- **About page**: added the FurBoats fork repo tile next to the original
+  Github tile; original author/repo entries untouched.
+- **App-data export merged**: the separate export/import app-data tiles
+  in advanced settings are gone. `CloudConfigTypeEnum.appData` (code 6)
+  is now one checkbox in the original export-data selection dialog —
+  selecting it exports the AppDataTransferService zip alongside/instead
+  of the JSON; the original import flow accepts `.zip` too and stages it
+  the same way as before.
+- **Igneous node removed**: XraySetting drops `igneousNodeIndex`;
+  XrayService/Windows bridge/Kotlin bridge now build a single-inbound
+  config (main only, port 23366 default). IgneousRefreshService was
+  rewritten: API mode (default) POSTs the base cookies as JSON to the
+  configured refresh API (default
+  `https://exrefresh.fur.boats/ign_refresh`) and stores the returned
+  igneous; legacy mode requests the EX index directly. Both ride
+  `findProxySettingFunc` (the app's normal proxy setting, Xray main node
+  included). Placeholder igneous values (empty / "mystery" / "null")
+  count as failure in both modes.
+- **Auto-refresh gate**: AdvancedSetting gains `autoRefreshIgneous`
+  (default on), `igneousRefreshFailStreak`, `useIgneousRefreshApi`,
+  `igneousRefreshApiUrl`. Sad Panda refreshes are skipped silently when
+  the switch is off; 5 consecutive failures auto-disable it (with a
+  toast). Advanced settings page has the new switch.
+- **Cookie page**: the igneous row shows a small "long press to switch
+  refresh mode" hint; long-press opens the API-mode dialog (switch +
+  address). Confirming with the switch on shows a second warning dialog
+  stating the login credentials will be sent to that third-party
+  endpoint.
+- **Failover visibility**: health-check failover now toasts the user;
+  the switch logic lives in `XrayService.switchToNextMainNode()` which
+  waits for the restarted core's inbound.
+- **Ban handling**: EHRequest retries once after a node switch when a
+  response is an IP-ban page (EHSiteExceptionType.banned), with a toast.
+- **Cron removed**: subscription cron auto-refresh deleted end to end
+  (XrayService timer/tick, XraySubscription.cron, page UI, cron_util.dart).

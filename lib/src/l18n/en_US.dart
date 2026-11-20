@@ -102,6 +102,18 @@ class en_US {
       'parse': 'parse',
       'igneousHint': 'igneous(EX required)',
       'refreshIgneousFailed': 'Refresh Igneous Failed',
+      'autoRefreshIgneous': 'Auto Refresh Igneous',
+      'autoRefreshIgneousHint': 'Automatically refresh igneous on Sad Panda; turns off after 5 consecutive failures',
+      'autoRefreshIgneousDisabled': 'Auto igneous refresh failed 5 times in a row and has been turned off',
+      'longPress2SwitchIgneousRefreshMode': 'Long press to switch refresh mode',
+      'refreshIgneousViaApi': 'Refresh Igneous via API',
+      'igneousRefreshApiUrl': 'API URL',
+      'igneousRefreshApiWarning': 'If you enable this, your account login credentials will be sent to the third-party endpoint @url. Please make sure you trust this endpoint before continuing.',
+      'continue': 'Continue',
+      'ipBannedNodeSwitched': "This node's IP has been temporarily banned. Switched to @name and reloading",
+      'appData': 'Full App Data',
+      'forkRepo': 'Fork Repo',
+      'forkRepoHint': 'This project is a secondary-development fork of the original JHenTai',
 
       /// request
       'sadPanda': 'Sad Panda(no data). Refer: https://github.com/jiangtian616/JHenTai/wiki/Common-Questions',
