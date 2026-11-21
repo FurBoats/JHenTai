@@ -114,13 +114,13 @@ jobs:
           # `flutter build apk` run clears the gradle output dir
           # (build/app/outputs/apk/release), wiping the split APKs there.
           # The flutter-apk dir keeps copies of every build's output.
-          flutter build apk -t lib/src/main.dart --release --split-per-abi
+          flutter build apk -t lib/src/main.dart --release --split-per-abi --dart-define=EHSR_BUILTIN_KEY=${{ secrets.EHSR_BUILTIN_KEY }}
           cd build/app/outputs/flutter-apk
           mv app-arm64-v8a-release.apk JHenTai-${{ steps.get_version.outputs.version }}-xray-arm64-v8a.apk
           mv app-armeabi-v7a-release.apk JHenTai-${{ steps.get_version.outputs.version }}-xray-armeabi-v7a.apk
           mv app-x86_64-release.apk JHenTai-${{ steps.get_version.outputs.version }}-xray-x86_64.apk
           cd "$GITHUB_WORKSPACE"
-          flutter build apk -t lib/src/main.dart --release
+          flutter build apk -t lib/src/main.dart --release --dart-define=EHSR_BUILTIN_KEY=${{ secrets.EHSR_BUILTIN_KEY }}
           mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/JHenTai-${{ steps.get_version.outputs.version }}-xray-universal.apk
 
       - name: Resolve release tag
@@ -231,7 +231,7 @@ jobs:
         # to every cl.exe invocation of the build.
         env:
           CL: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
-        run: flutter build windows -t lib/src/main.dart --release
+        run: flutter build windows -t lib/src/main.dart --release --dart-define=EHSR_BUILTIN_KEY=${{ secrets.EHSR_BUILTIN_KEY }}
 
       - name: Package portable zip
         shell: pwsh
