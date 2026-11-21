@@ -16,7 +16,6 @@ import 'package:jhentai/src/widget/eh_group_name_selector.dart';
 import 'package:jhentai/src/widget/loading_state_indicator.dart';
 
 import '../exception/eh_site_exception.dart';
-import '../service/cloud_super_resolution_service.dart';
 import '../model/archive_bot_response/archive_bot_response.dart';
 import '../network/archive_bot_request.dart';
 import '../network/eh_request.dart';
@@ -56,8 +55,6 @@ class _EHArchiveDialogState extends State<EHArchiveDialog> {
   int? balance;
   int? botCost;
   bool useBot = archiveBotSetting.isReady;
-  bool cloudSr = false;
-  int cloudScale = 4;
 
   @override
   void initState() {
@@ -97,7 +94,6 @@ class _EHArchiveDialogState extends State<EHArchiveDialog> {
       children: [
         EHGroupNameSelector(candidates: candidates, currentGroup: group, listener: (g) => group = g),
         _buildSourceSelector().marginOnly(top: 12),
-        if (cloudSuperResolutionService.isReady) _buildCloudSrOption().marginOnly(top: 12),
         if (!useBot && archive.creditCount != null && archive.gpCount != null)
           EHAsset(gpCount: archive.gpCount!, creditCount: archive.creditCount!).marginOnly(top: 12),
         if (useBot) _buildBalance().marginOnly(top: 12),
@@ -139,40 +135,6 @@ class _EHArchiveDialogState extends State<EHArchiveDialog> {
       ],
       selected: {useBot},
       onSelectionChanged: (Set<bool> selection) => _switchSource(selection.first),
-    );
-  }
-
-  Widget _buildCloudSrOption() {
-    // 开关一行、倍率选择单独一行，避免一行塞满超出对话框宽度
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('cloudSuperResolve'.tr),
-            Switch(
-              value: cloudSr,
-              onChanged: (bool value) => setState(() => cloudSr = value),
-            ),
-          ],
-        ),
-        if (cloudSr)
-          SegmentedButton<int>(
-            showSelectedIcon: false,
-            style: const ButtonStyle(
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              padding: WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
-            ),
-            segments: const [
-              ButtonSegment(value: 2, label: Text('2x')),
-              ButtonSegment(value: 3, label: Text('3x')),
-              ButtonSegment(value: 4, label: Text('4x')),
-            ],
-            selected: {cloudScale},
-            onSelectionChanged: (Set<int> selection) => setState(() => cloudScale = selection.first),
-          ).marginOnly(top: 8),
-      ],
     );
   }
 
@@ -322,7 +284,6 @@ class _EHArchiveDialogState extends State<EHArchiveDialog> {
                   isOriginal: isOriginal,
                   size: _computeSizeInBytes(isOriginal: isOriginal),
                   group: group,
-                  cloudSrScale: cloudSr ? cloudScale : null,
                 ),
               )
           : null,

@@ -40,7 +40,7 @@ mixin GalleryDownloadPageLogicMixin on GetxController
   Future<void> handleChangeGroup(GalleryDownloadInfo gallery) async {
     String oldGroup = downloadService.galleryDownloadInfos[gallery.gid]!.group;
 
-    ({String group, bool downloadOriginalImage, int? cloudSrScale})? result = await Get.dialog(
+    ({String group, bool downloadOriginalImage})? result = await Get.dialog(
       EHDownloadDialog(
         title: 'changeGroup'.tr,
         currentGroup: oldGroup,
@@ -70,7 +70,7 @@ mixin GalleryDownloadPageLogicMixin on GetxController
   }
 
   Future<void> handleRenameGroup(String oldGroup) async {
-    ({String group, bool downloadOriginalImage, int? cloudSrScale})? result = await Get.dialog(
+    ({String group, bool downloadOriginalImage})? result = await Get.dialog(
       EHDownloadDialog(
         title: 'renameGroup'.tr,
         currentGroup: oldGroup,
@@ -293,7 +293,7 @@ mixin GalleryDownloadPageLogicMixin on GetxController
   }
 
   Future<void> handleMultiChangeGroup() async {
-    ({String group, bool downloadOriginalImage, int? cloudSrScale})? result = await Get.dialog(
+    ({String group, bool downloadOriginalImage})? result = await Get.dialog(
       EHDownloadDialog(
         title: 'changeGroup'.tr,
         candidates: downloadService.allGroups,

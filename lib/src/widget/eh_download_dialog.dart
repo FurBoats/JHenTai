@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:jhentai/src/config/ui_config.dart';
-import 'package:jhentai/src/service/cloud_super_resolution_service.dart';
 import 'package:jhentai/src/setting/download_setting.dart';
 import 'package:jhentai/src/utils/route_util.dart';
 import 'package:jhentai/src/utils/toast_util.dart';
@@ -15,7 +14,6 @@ class EHDownloadDialog extends StatefulWidget {
   final bool showDownloadOriginalImageCheckBox;
   final bool downloadOriginalImage;
   final List<String> preferredGroups;
-  final bool showCloudSrOption;
 
   const EHDownloadDialog({
     Key? key,
@@ -25,7 +23,6 @@ class EHDownloadDialog extends StatefulWidget {
     this.showDownloadOriginalImageCheckBox = false,
     this.downloadOriginalImage = false,
     this.preferredGroups = const [],
-    this.showCloudSrOption = false,
   }) : super(key: key);
 
   @override
@@ -36,8 +33,6 @@ class _EHDownloadDialogState extends State<EHDownloadDialog> {
   late String group;
   late List<String> candidates;
   late bool downloadOriginalImage;
-  bool cloudSr = false;
-  int cloudScale = 4;
 
   @override
   void initState() {
@@ -69,7 +64,6 @@ class _EHDownloadDialogState extends State<EHDownloadDialog> {
               result: (
                 group: group,
                 downloadOriginalImage: downloadOriginalImage,
-                cloudSrScale: (!downloadOriginalImage && cloudSr) ? cloudScale : null,
               ),
             );
           },
@@ -91,53 +85,6 @@ class _EHDownloadDialogState extends State<EHDownloadDialog> {
             listener: (g) => group = g,
           ),
           if (widget.showDownloadOriginalImageCheckBox) _buildDownloadOriginalImageCheckBox().marginOnly(top: 16),
-          if (widget.showCloudSrOption && cloudSuperResolutionService.isReady)
-            AnimatedSize(
-              duration: const Duration(milliseconds: 200),
-              alignment: Alignment.topCenter,
-              child: downloadOriginalImage ? const SizedBox.shrink() : _buildCloudSrRow().marginOnly(top: 16),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCloudSrRow() {
-    // 标签+勾选一行、倍率选择单独一行：全挤在一行会超出对话框宽度被裁掉
-    return SizedBox(
-      width: UIConfig.downloadDialogWidth,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.end,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text('cloudSuperResolve'.tr + ' ?', style: const TextStyle(fontSize: UIConfig.groupDialogCheckBoxTextSize)),
-              Checkbox(
-                value: cloudSr,
-                activeColor: UIConfig.groupDialogCheckBoxColor(context),
-                onChanged: (bool? value) => setState(() => cloudSr = value ?? false),
-              ),
-            ],
-          ),
-          if (cloudSr)
-            SegmentedButton<int>(
-              showSelectedIcon: false,
-              style: const ButtonStyle(
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                padding: WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 8, vertical: 2)),
-              ),
-              segments: const [
-                ButtonSegment(value: 2, label: Text('2x')),
-                ButtonSegment(value: 3, label: Text('3x')),
-                ButtonSegment(value: 4, label: Text('4x')),
-              ],
-              selected: {cloudScale},
-              onSelectionChanged: (Set<int> selection) => setState(() => cloudScale = selection.first),
-            ).marginOnly(top: 8),
         ],
       ),
     );

@@ -138,7 +138,7 @@ class _SettingDownloadPageState extends State<SettingDownloadPage> {
       subtitle: Text('longPress2Reset'.tr),
       trailing: Text(downloadSetting.defaultGalleryGroup.value ?? '', style: UIConfig.settingPageListTileTrailingTextStyle(context)),
       onTap: () async {
-        ({String group, bool downloadOriginalImage, int? cloudSrScale})? result = await showDialog(
+        ({String group, bool downloadOriginalImage})? result = await showDialog(
           context: context,
           builder: (_) => EHDownloadDialog(
             title: 'chooseGroup'.tr,
@@ -163,7 +163,7 @@ class _SettingDownloadPageState extends State<SettingDownloadPage> {
         subtitle: Text('longPress2Reset'.tr),
         trailing: Text(downloadSetting.defaultArchiveGroup.value ?? '', style: UIConfig.settingPageListTileTrailingTextStyle(context)),
         onTap: () async {
-          ({String group, bool downloadOriginalImage, int? cloudSrScale})? result = await showDialog(
+          ({String group, bool downloadOriginalImage})? result = await showDialog(
             context: context,
             builder: (_) => EHDownloadDialog(
               title: 'chooseGroup'.tr,

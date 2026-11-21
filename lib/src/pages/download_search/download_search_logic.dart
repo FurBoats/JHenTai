@@ -356,7 +356,7 @@ class DownloadSearchLogic extends GetxController with UpdateGlobalGalleryStatusL
   Future<void> handleChangeGalleryGroup(GallerySearchVO gallery) async {
     String oldGroup = galleryDownloadService.galleryDownloadInfos[gallery.gid]!.group;
 
-    ({String group, bool downloadOriginalImage, int? cloudSrScale})? result = await Get.dialog(
+    ({String group, bool downloadOriginalImage})? result = await Get.dialog(
       EHDownloadDialog(
         title: 'changeGroup'.tr,
         currentGroup: oldGroup,
@@ -408,7 +408,7 @@ class DownloadSearchLogic extends GetxController with UpdateGlobalGalleryStatusL
   Future<void> handleChangeArchiveGroup(ArchiveSearchVO archive) async {
     String oldGroup = archiveDownloadService.archiveDownloadInfos[archive.gid]!.group;
 
-    ({String group, bool downloadOriginalImage, int? cloudSrScale})? result = await Get.dialog(
+    ({String group, bool downloadOriginalImage})? result = await Get.dialog(
       EHDownloadDialog(
         title: 'changeGroup'.tr,
         currentGroup: oldGroup,
