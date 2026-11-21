@@ -276,6 +276,11 @@ class _GalleryDownloadTaskRunner {
         return;
       }
 
+      /// 云端超分画廊：不逐张下载，登记攒批，整批链接交给后端超分后回填
+      if (_service._cloudSrScales.containsKey(gallery.gid)) {
+        return _service._registerCloudSrImage(galleryDownloadInfo, image, serialNo, downloadUrl);
+      }
+
       Response response;
       try {
         response = await retry(

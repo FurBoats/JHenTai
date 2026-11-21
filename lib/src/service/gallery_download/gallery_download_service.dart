@@ -31,6 +31,8 @@ import 'package:jhentai/src/model/jh_response/jh_response.dart';
 import 'package:jhentai/src/network/jh_request.dart';
 import 'package:jhentai/src/service/local_config_service.dart';
 import 'package:jhentai/src/service/log.dart';
+import 'package:archive/archive.dart';
+import 'package:jhentai/src/service/cloud_super_resolution_service.dart';
 import 'package:jhentai/src/service/super_resolution_service.dart';
 import 'package:jhentai/src/setting/download_setting.dart';
 import 'package:jhentai/src/setting/site_setting.dart';
@@ -186,6 +188,10 @@ class GalleryDownloadService extends GetxController with GridBasePageServiceMixi
 
     if (!await _initGalleryInfo(gallery)) {
       return;
+    }
+
+    if (request.cloudSrScale != null) {
+      _cloudSrScales[gallery.gid] = request.cloudSrScale!;
     }
 
     _generateComicInfoInDisk(galleryDownloadInfos[gallery.gid]!);
@@ -498,6 +504,8 @@ class GalleryDownloadService extends GetxController with GridBasePageServiceMixi
   }
 
   Future<void> deleteGallery(GalleryDownloadInfo gallery, {bool deleteImages = true}) async {
+    _cloudSrScales.remove(gallery.gid);
+    _cloudSrBatches.remove(gallery.gid)?.debounce?.cancel();
     await pauseDownloadGallery(gallery);
 
     log.info('Delete download gallery: ${gallery.title}, deleteImages:$deleteImages');
@@ -1166,6 +1174,123 @@ class GalleryDownloadService extends GetxController with GridBasePageServiceMixi
     return galleryDownloadInfos[gallery.gid] == null;
   }
 
+  // ---------------- 云端超分下载（整批链接交给后端） ----------------
+
+  /// gid -> 云端超分倍率（仅内存态，见 GalleryDownloadRequest.cloudSrScale）
+  final Map<int, int> _cloudSrScales = {};
+
+  /// gid -> 正在攒批的图片
+  final Map<int, _CloudSrBatch> _cloudSrBatches = {};
+
+  /// 云端超分画廊的图片下载任务不逐张下载，而是登记到这里攒成一批：
+  /// 齐了立刻跑，没齐防抖 3 秒后跑（其余图片可能还在解析链接）。
+  Future<void> _registerCloudSrImage(GalleryDownloadInfo gallery, GalleryImage image, int serialNo, String downloadUrl) {
+    _CloudSrBatch batch = _cloudSrBatches.putIfAbsent(gallery.gid, () => _CloudSrBatch(_cloudSrScales[gallery.gid]!));
+    _CloudSrPending pending = _CloudSrPending(image, downloadUrl);
+    batch.pending[serialNo] = pending;
+    if (batch.pending.length + gallery.downloadProgress.curCount >= gallery.downloadProgress.totalCount) {
+      batch.debounce?.cancel();
+      _runCloudSrBatch(gallery);
+    } else {
+      batch.debounce?.cancel();
+      batch.debounce = Timer(const Duration(seconds: 3), () => _runCloudSrBatch(gallery));
+    }
+    return pending.completer.future;
+  }
+
+  Future<void> _runCloudSrBatch(GalleryDownloadInfo gallery) async {
+    _CloudSrBatch? batch = _cloudSrBatches[gallery.gid];
+    if (batch == null || batch.running || batch.pending.isEmpty) {
+      return;
+    }
+    batch.running = true;
+    batch.debounce?.cancel();
+    Map<int, _CloudSrPending> entries = Map<int, _CloudSrPending>.from(batch.pending);
+    batch.pending.clear();
+    try {
+      List<int>? zipBytes = await cloudSuperResolutionService.superResolveByUrls(
+        urls: entries.values.map((e) => e.downloadUrl).toList(),
+        scale: batch.scale,
+        shouldAbort: () => _taskHasBeenPausedOrRemoved(gallery),
+      );
+
+      Map<String, List<int>> files = {};
+      if (zipBytes != null) {
+        Archive archive = ZipDecoder().decodeBytes(zipBytes);
+        for (ArchiveFile file in archive.files) {
+          if (file.isFile) {
+            files[file.name] = file.content as List<int>;
+          }
+        }
+      }
+
+      for (MapEntry<int, _CloudSrPending> entry in entries.entries) {
+        int serialNo = entry.key;
+        _CloudSrPending pending = entry.value;
+        try {
+          if (_taskHasBeenPausedOrRemoved(gallery)) {
+            continue;
+          }
+          String fileName = path.basename(Uri.parse(pending.downloadUrl).path);
+          List<int>? bytes = files[fileName];
+          bool ok = false;
+          if (bytes != null) {
+            String imagePath = DownloadPathResolver.computeImageDownloadAbsolutePath(gallery.toGalleryDownloadedData(), pending.downloadUrl, serialNo);
+            await io.File(imagePath).writeAsBytes(bytes, flush: true);
+            ok = true;
+          } else {
+            // 云端没产出这张（链接被拒/单图失败）→ 回退普通下载
+            ok = await _downloadImageDirectly(gallery, pending.downloadUrl, serialNo);
+          }
+          if (ok && !_taskHasBeenPausedOrRemoved(gallery)) {
+            await _updateImageStatus(gallery, pending.image, serialNo, DownloadStatus.downloaded);
+            await _updateProgressAfterImageDownloaded(gallery, serialNo);
+          }
+        } finally {
+          pending.completer.complete();
+        }
+      }
+    } catch (e, s) {
+      log.error('Cloud SR batch failed, gid:${gallery.gid}, fallback to normal download', e, s);
+      for (MapEntry<int, _CloudSrPending> entry in entries.entries) {
+        try {
+          bool ok = await _downloadImageDirectly(gallery, entry.value.downloadUrl, entry.key);
+          if (ok && !_taskHasBeenPausedOrRemoved(gallery)) {
+            await _updateImageStatus(gallery, entry.value.image, entry.key, DownloadStatus.downloaded);
+            await _updateProgressAfterImageDownloaded(gallery, entry.key);
+          }
+        } catch (_) {
+          // 单张回退失败不拖累整批，图片保持 downloading 态等待恢复
+        } finally {
+          entry.value.completer.complete();
+        }
+      }
+    } finally {
+      batch.running = false;
+      if (batch.pending.isNotEmpty) {
+        _runCloudSrBatch(gallery);
+      } else if (gallery.downloadProgress.curCount >= gallery.downloadProgress.totalCount) {
+        _cloudSrBatches.remove(gallery.gid);
+        _cloudSrScales.remove(gallery.gid);
+      }
+    }
+  }
+
+  Future<bool> _downloadImageDirectly(GalleryDownloadInfo gallery, String downloadUrl, int serialNo) async {
+    try {
+      String imagePath = DownloadPathResolver.computeImageDownloadAbsolutePath(gallery.toGalleryDownloadedData(), downloadUrl, serialNo);
+      await ehRequest.download(
+        url: downloadUrl,
+        path: imagePath,
+        receiveTimeout: 3 * 60 * 1000,
+        cancelToken: gallery.cancelToken,
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _updateProgressAfterImageDownloaded(GalleryDownloadInfo gallery, int serialNo) async {
     /// Status-gate at entry: if a concurrent pause / pauseAll / delete has
     /// flipped status away from [DownloadStatus.downloading], this is a late
@@ -1597,6 +1722,11 @@ class GalleryDownloadRequest {
   final int? sortOrder;
   final int? priority;
 
+  /// 非空 = 本次下载走云端超分：图片链接整批交给后端超分后回填，
+  /// 任一环节失败自动回退普通逐张下载。仅内存态，不落库，
+  /// 应用重启后恢复下载会退回普通下载。
+  final int? cloudSrScale;
+
   const GalleryDownloadRequest({
     required this.gid,
     required this.token,
@@ -1613,7 +1743,25 @@ class GalleryDownloadRequest {
     this.oldVersionGalleryUrl,
     this.sortOrder,
     this.priority,
+    this.cloudSrScale,
   });
+}
+
+class _CloudSrBatch {
+  final int scale;
+  final Map<int, _CloudSrPending> pending = {};
+  Timer? debounce;
+  bool running = false;
+
+  _CloudSrBatch(this.scale);
+}
+
+class _CloudSrPending {
+  final GalleryImage image;
+  final String downloadUrl;
+  final Completer<void> completer = Completer<void>();
+
+  _CloudSrPending(this.image, this.downloadUrl);
 }
 
 /// Pick the URL to actually download from, given the gallery's

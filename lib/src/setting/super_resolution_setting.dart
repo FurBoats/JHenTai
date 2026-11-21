@@ -13,6 +13,12 @@ class SuperResolutionSetting with JHLifeCircleBeanWithConfigStorage implements J
   Rx<ModelType> model = Rx<ModelType>(ModelType.CUGAN);
   RxInt gpuId = 0.obs;
 
+  // ---- 云端超分（远程接口超分，双端可用） ----
+  RxBool cloudEnabled = false.obs;
+  RxBool cloudUseBuiltin = true.obs;
+  RxString cloudCustomSchedulerUrl = ''.obs;
+  RxString cloudCustomClientKey = ''.obs;
+
   @override
   ConfigEnum get configEnum => ConfigEnum.superResolutionSetting;
 
@@ -23,6 +29,10 @@ class SuperResolutionSetting with JHLifeCircleBeanWithConfigStorage implements J
     modelDirectoryPath.value = map['modelDirectoryPath'];
     model.value = map['model'] == null ? ModelType.CUGAN : ModelType.values[map['model']];
     gpuId.value = map['gpuId'] ?? gpuId.value;
+    cloudEnabled.value = map['cloudEnabled'] ?? false;
+    cloudUseBuiltin.value = map['cloudUseBuiltin'] ?? true;
+    cloudCustomSchedulerUrl.value = map['cloudCustomSchedulerUrl'] ?? '';
+    cloudCustomClientKey.value = map['cloudCustomClientKey'] ?? '';
   }
 
   @override
@@ -31,6 +41,10 @@ class SuperResolutionSetting with JHLifeCircleBeanWithConfigStorage implements J
       'modelDirectoryPath': modelDirectoryPath.value,
       'model': model.value.index,
       'gpuId': gpuId.value,
+      'cloudEnabled': cloudEnabled.value,
+      'cloudUseBuiltin': cloudUseBuiltin.value,
+      'cloudCustomSchedulerUrl': cloudCustomSchedulerUrl.value,
+      'cloudCustomClientKey': cloudCustomClientKey.value,
     });
   }
 
@@ -55,6 +69,26 @@ class SuperResolutionSetting with JHLifeCircleBeanWithConfigStorage implements J
   Future<void> saveGpuId(int gpuId) async {
     log.debug('saveGpuId:$gpuId');
     this.gpuId.value = gpuId;
+    await saveBeanConfig();
+  }
+
+  Future<void> saveCloudEnabled(bool enabled) async {
+    cloudEnabled.value = enabled;
+    await saveBeanConfig();
+  }
+
+  Future<void> saveCloudUseBuiltin(bool useBuiltin) async {
+    cloudUseBuiltin.value = useBuiltin;
+    await saveBeanConfig();
+  }
+
+  Future<void> saveCloudCustomSchedulerUrl(String url) async {
+    cloudCustomSchedulerUrl.value = url;
+    await saveBeanConfig();
+  }
+
+  Future<void> saveCloudCustomClientKey(String key) async {
+    cloudCustomClientKey.value = key;
     await saveBeanConfig();
   }
 }

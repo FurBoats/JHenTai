@@ -357,7 +357,7 @@ class DetailsPageLogic extends GetxController with LoginRequiredMixin, Scroll2To
 
     /// new download
     if (galleryDownloadedData == null || downloadProgress == null) {
-      ({String group, bool downloadOriginalImage})? result = await Get.dialog(
+      ({String group, bool downloadOriginalImage, int? cloudSrScale})? result = await Get.dialog(
         EHDownloadDialog(
           title: 'chooseGroup'.tr,
           currentGroup: downloadSetting.defaultGalleryGroup.value,
@@ -365,6 +365,7 @@ class DetailsPageLogic extends GetxController with LoginRequiredMixin, Scroll2To
           showDownloadOriginalImageCheckBox: userSetting.hasLoggedIn(),
           downloadOriginalImage: downloadSetting.downloadOriginalImageByDefault.value,
           preferredGroups: downloadSetting.preferredGalleryGroups,
+          showCloudSrOption: true,
         ),
       );
 
@@ -389,6 +390,7 @@ class DetailsPageLogic extends GetxController with LoginRequiredMixin, Scroll2To
         publishTime: state.galleryDetails?.publishTime ?? state.gallery!.publishTime,
         downloadOriginalImage: result.downloadOriginalImage,
         group: result.group,
+        cloudSrScale: result.cloudSrScale,
         tags: state.galleryDetails != null ? tagMap2TagString(state.galleryDetails!.tags) : tagMap2TagString(state.gallery!.tags),
         tagRefreshTime: DateTime.now().toString(),
       );
@@ -645,7 +647,7 @@ class DetailsPageLogic extends GetxController with LoginRequiredMixin, Scroll2To
         return;
       }
 
-      ({bool useBot, bool isOriginal, int size, String group})? result = await Get.dialog(
+      ({bool useBot, bool isOriginal, int size, String group, int? cloudSrScale})? result = await Get.dialog(
         EHArchiveDialog(
           title: 'chooseArchive'.tr,
           gid: state.galleryDetails!.galleryUrl.gid,
@@ -680,7 +682,7 @@ class DetailsPageLogic extends GetxController with LoginRequiredMixin, Scroll2To
         tagRefreshTime: DateTime.now().toString(),
         parseSource: result.useBot ? ArchiveParseSource.bot.code : ArchiveParseSource.official.code,
       );
-      archiveDownloadService.downloadArchive(archive);
+      archiveDownloadService.downloadArchive(archive, cloudSrScale: result.cloudSrScale);
 
       updateGlobalGalleryStatus();
 

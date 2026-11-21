@@ -1,6 +1,6 @@
 # JHenTai (Xray-enhanced fork)
 
-This repository is based on [JHenTai](https://github.com/jiangtian616/JHenTai) by the original author **JTMonster (jiangtian616)**. All original features, documentation and credits belong to the original project; please see the original repository for the full manual. This fork only adds the Xray-related changes listed below — everything else behaves exactly like the original app.
+This repository is based on [JHenTai](https://github.com/jiangtian616/JHenTai) by the original author **JTMonster (jiangtian616)**. All original features, documentation and credits belong to the original project; please see the original repository for the full manual. This fork only adds the changes listed below — everything else behaves exactly like the original app.
 
 ## What this fork changes
 
@@ -14,6 +14,7 @@ This repository is based on [JHenTai](https://github.com/jiangtian616/JHenTai) b
 8. **Downloads go through the main node** — both gallery image downloads and archive downloads.
 9. **IP-ban failover.** If the site replies that this IP address has been temporarily banned due to an excessive request rate, the app switches the main node, notifies the user with a toast, and reloads the request.
 10. **Full app-data export, merged into the built-in export.** The original export-data selection gains a "full app data" option that produces a zip archive; the original import flow accepts that zip and restores everything.
+11. **Cloud super resolution (Android & Windows).** Advanced Settings → Image Super Resolution gains a cloud SR switch (off by default; enabling it uploads your images to the cloud node, as the in-app hint warns). When on, super resolution runs on a remote Real-ESRGAN backend instead of the local ncnn models: at gallery download time the image links are sent to the backend, at archive download time the archive link is sent, and for already-downloaded galleries/archives the long-press menu uploads the local files. Scale is 2x/3x/4x. On desktop, if the local ncnn models are configured, local SR takes precedence. Backends are dispatched by a scheduler (companion projects `JH_SuperResolution_Scheduler` and `JH_SuperResolution`); a built-in provider node can be baked in at build time through the `EHSR_BUILTIN_KEY` repository secret, or you can point the app at your own scheduler with your own client key.
 
 ## Downloads
 

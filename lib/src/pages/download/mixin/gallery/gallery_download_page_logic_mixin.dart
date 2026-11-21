@@ -4,6 +4,7 @@ import 'package:jhentai/src/config/ui_config.dart';
 import 'package:jhentai/src/extension/get_logic_extension.dart';
 import 'package:jhentai/src/mixin/scroll_to_top_logic_mixin.dart';
 import 'package:jhentai/src/mixin/update_global_gallery_status_logic_mixin.dart';
+import 'package:jhentai/src/service/cloud_super_resolution_service.dart';
 import 'package:jhentai/src/service/super_resolution_service.dart';
 import 'package:jhentai/src/setting/super_resolution_setting.dart';
 
@@ -39,7 +40,7 @@ mixin GalleryDownloadPageLogicMixin on GetxController
   Future<void> handleChangeGroup(GalleryDownloadInfo gallery) async {
     String oldGroup = downloadService.galleryDownloadInfos[gallery.gid]!.group;
 
-    ({String group, bool downloadOriginalImage})? result = await Get.dialog(
+    ({String group, bool downloadOriginalImage, int? cloudSrScale})? result = await Get.dialog(
       EHDownloadDialog(
         title: 'changeGroup'.tr,
         currentGroup: oldGroup,
@@ -69,7 +70,7 @@ mixin GalleryDownloadPageLogicMixin on GetxController
   }
 
   Future<void> handleRenameGroup(String oldGroup) async {
-    ({String group, bool downloadOriginalImage})? result = await Get.dialog(
+    ({String group, bool downloadOriginalImage, int? cloudSrScale})? result = await Get.dialog(
       EHDownloadDialog(
         title: 'renameGroup'.tr,
         currentGroup: oldGroup,
@@ -178,6 +179,21 @@ mixin GalleryDownloadPageLogicMixin on GetxController
               superResolutionService.superResolve(gallery.gid, SuperResolutionType.gallery);
             },
           ),
+        if (superResolutionSetting.modelDirectoryPath.value == null &&
+            cloudSuperResolutionService.isReady &&
+            downloadService.galleryDownloadInfos[gallery.gid]?.downloadProgress.downloadStatus == DownloadStatus.downloaded &&
+            (superResolutionService.get(gallery.gid, SuperResolutionType.gallery) == null ||
+                superResolutionService.get(gallery.gid, SuperResolutionType.gallery)?.status == SuperResolutionStatus.paused))
+          EHContextMenuAction(
+            text: 'cloudSuperResolve'.tr,
+            onTap: () async {
+              int? scale = await pickCloudSuperResolutionScale();
+              if (scale == null) {
+                return;
+              }
+              cloudSuperResolutionService.superResolve(gallery.gid, SuperResolutionType.gallery, scale: scale);
+            },
+          ),
         if (superResolutionService.get(gallery.gid, SuperResolutionType.gallery)?.status == SuperResolutionStatus.running)
           EHContextMenuAction(
             text: 'stopSuperResolution'.tr,
@@ -277,7 +293,7 @@ mixin GalleryDownloadPageLogicMixin on GetxController
   }
 
   Future<void> handleMultiChangeGroup() async {
-    ({String group, bool downloadOriginalImage})? result = await Get.dialog(
+    ({String group, bool downloadOriginalImage, int? cloudSrScale})? result = await Get.dialog(
       EHDownloadDialog(
         title: 'changeGroup'.tr,
         candidates: downloadService.allGroups,

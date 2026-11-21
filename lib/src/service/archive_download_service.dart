@@ -23,6 +23,7 @@ import 'package:jhentai/src/model/archive_unlock_result.dart';
 import 'package:jhentai/src/network/archive_bot_request.dart';
 import 'package:jhentai/src/network/eh_request.dart';
 import 'package:jhentai/src/service/path_service.dart';
+import 'package:jhentai/src/service/cloud_super_resolution_service.dart';
 import 'package:jhentai/src/service/super_resolution_service.dart';
 import 'package:jhentai/src/setting/archive_bot_setting.dart';
 import 'package:jhentai/src/setting/download_setting.dart';
@@ -116,7 +117,7 @@ class ArchiveDownloadService extends GetxController with GridBasePageServiceMixi
     return archiveDownloadInfos.containsKey(gid);
   }
 
-  Future<void> downloadArchive(ArchiveDownloadedData archive, {bool resume = false, bool reParse = false}) async {
+  Future<void> downloadArchive(ArchiveDownloadedData archive, {bool resume = false, bool reParse = false, int? cloudSrScale}) async {
     // Windows: the first download asks where files should go.
     if (!resume && !await downloadSetting.ensureDownloadPathChosen()) {
       return;
@@ -150,8 +151,13 @@ class ArchiveDownloadService extends GetxController with GridBasePageServiceMixi
     /// step 3: parse download url
     await _getDownloadUrl(archive, reParse: reParse);
 
-    /// step 4: do download
-    await _doDownloadArchiveViaMultiIsolate(archive);
+    /// step 4: do download（勾选云端超分时，把压缩包链接交给后端超分，
+    /// 结果包直接落到本地归档文件的位置，后续解包流程不变）
+    if (cloudSrScale != null) {
+      await _doCloudDownloadArchive(archive, cloudSrScale);
+    } else {
+      await _doDownloadArchiveViaMultiIsolate(archive);
+    }
 
     /// step 5: unpacking files
     await _unpackingArchive(archive);
@@ -1060,6 +1066,35 @@ class ArchiveDownloadService extends GetxController with GridBasePageServiceMixi
 
     log.trace('Parse archive download url success: ${archive.title}, original: ${archive.isOriginal}, url: ${archiveDownloadInfo.downloadUrl}');
     return _updateArchiveStatus(archive.gid, ArchiveStatus.parsedDownloadUrl);
+  }
+
+  Future<void> _doCloudDownloadArchive(ArchiveDownloadedData archive, int scale) async {
+    ArchiveDownloadInfo archiveDownloadInfo = archiveDownloadInfos[archive.gid]!;
+    if (!_isTaskInStatus(archive.gid, [ArchiveStatus.parsedDownloadUrl, ArchiveStatus.downloading])) {
+      return;
+    }
+
+    log.download('Begin to download archive via cloud SR: ${archive.title}, scale: $scale');
+
+    await _updateArchiveStatus(archive.gid, ArchiveStatus.downloading);
+
+    bool ok = await cloudSuperResolutionService.fetchSuperResolvedArchive(
+      archiveUrl: archiveDownloadInfo.downloadUrl!,
+      scale: scale,
+      savePath: computePackingFileDownloadPath(archive),
+      shouldAbort: () => archiveDownloadInfos[archive.gid]?.archiveStatus != ArchiveStatus.downloading,
+    );
+
+    if (!ok) {
+      if (archiveDownloadInfos[archive.gid]?.archiveStatus == ArchiveStatus.downloading) {
+        snack('archiveError'.tr, 'cloudSuperResolutionFailed'.tr, isShort: true);
+        return pauseDownloadArchive(archive.gid);
+      }
+      return;
+    }
+
+    log.download('Download archive via cloud SR success: ${archive.title}');
+    return _updateArchiveStatus(archive.gid, ArchiveStatus.downloaded);
   }
 
   Future<void> _doDownloadArchiveViaMultiIsolate(ArchiveDownloadedData archive) async {

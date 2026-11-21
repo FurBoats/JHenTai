@@ -7,6 +7,7 @@ import 'package:jhentai/src/setting/preference_setting.dart';
 import 'package:jhentai/src/utils/toast_util.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
+import '../../../../service/cloud_super_resolution_service.dart';
 import '../../../../service/super_resolution_service.dart';
 import '../../../../setting/super_resolution_setting.dart';
 import '../../../../service/log.dart';
@@ -38,9 +39,19 @@ class SettingSuperResolutionPage extends StatelessWidget {
         () => ListView(
           padding: const EdgeInsets.only(top: 16),
           children: [
-            _buildModelDirectoryPath(),
-            _buildModelType(),
-            _buildGpuId(),
+            if (GetPlatform.isDesktop) _buildModelDirectoryPath(),
+            if (GetPlatform.isDesktop) _buildModelType(),
+            if (GetPlatform.isDesktop) _buildGpuId(),
+            _buildCloudEnabled(),
+            if (superResolutionSetting.cloudEnabled.value) ...[
+              _buildCloudHint(),
+              if (builtinProviderAvailable) _buildCloudProviderOption(true),
+              _buildCloudProviderOption(false),
+              if (!superResolutionSetting.cloudUseBuiltin.value) ...[
+                _buildCloudSchedulerUrl(),
+                _buildCloudClientKey(),
+              ],
+            ],
           ],
         ).withListTileTheme(context),
       ),
@@ -137,5 +148,90 @@ class SettingSuperResolutionPage extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  // ---------------- 云端超分 ----------------
+
+  Widget _buildCloudEnabled() {
+    return SwitchListTile(
+      title: Text('cloudSuperResolution'.tr),
+      value: superResolutionSetting.cloudEnabled.value,
+      onChanged: (bool value) => superResolutionSetting.saveCloudEnabled(value),
+    );
+  }
+
+  Widget _buildCloudHint() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Text(
+        'cloudSuperResolutionHint'.tr,
+        style: const TextStyle(fontSize: 13, color: Colors.grey),
+      ),
+    );
+  }
+
+  Widget _buildCloudProviderOption(bool builtin) {
+    bool selected = superResolutionSetting.cloudUseBuiltin.value == builtin;
+    return ListTile(
+      title: Text((builtin ? 'cloudProviderBuiltin' : 'cloudProviderCustom').tr),
+      trailing: Icon(selected ? Icons.radio_button_checked : Icons.radio_button_unchecked),
+      onTap: () => superResolutionSetting.saveCloudUseBuiltin(builtin),
+    );
+  }
+
+  Widget _buildCloudSchedulerUrl() {
+    String url = superResolutionSetting.cloudCustomSchedulerUrl.value;
+    return ListTile(
+      title: Text('cloudSchedulerUrl'.tr),
+      subtitle: Text(url.isEmpty ? 'cloudNotSet'.tr : url),
+      trailing: const Icon(Icons.keyboard_arrow_right),
+      onTap: () => _editText(
+        title: 'cloudSchedulerUrl'.tr,
+        initial: url,
+        onSave: superResolutionSetting.saveCloudCustomSchedulerUrl,
+      ),
+    );
+  }
+
+  Widget _buildCloudClientKey() {
+    String key = superResolutionSetting.cloudCustomClientKey.value;
+    return ListTile(
+      title: Text('cloudClientKey'.tr),
+      subtitle: Text(key.isEmpty ? 'cloudNotSet'.tr : '******'),
+      trailing: const Icon(Icons.keyboard_arrow_right),
+      onTap: () => _editText(
+        title: 'cloudClientKey'.tr,
+        initial: key,
+        obscure: true,
+        onSave: superResolutionSetting.saveCloudCustomClientKey,
+      ),
+    );
+  }
+
+  Future<void> _editText({
+    required String title,
+    required String initial,
+    required void Function(String value) onSave,
+    bool obscure = false,
+  }) async {
+    TextEditingController controller = TextEditingController(text: initial);
+    String? result = await Get.dialog<String>(
+      AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          obscureText: obscure,
+          autofocus: true,
+          decoration: const InputDecoration(isDense: true),
+        ),
+        actions: [
+          TextButton(onPressed: () => Get.back(), child: Text('cancel'.tr)),
+          TextButton(onPressed: () => Get.back(result: controller.text.trim()), child: Text('confirm'.tr)),
+        ],
+      ),
+    );
+    if (result != null) {
+      onSave(result);
+    }
   }
 }
