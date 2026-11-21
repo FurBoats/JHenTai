@@ -482,6 +482,8 @@ class zh_CN {
       'cloudNotSet': '未设置',
       'cloudNotConfigured': '云端超分未配置完整，请先在高级设置里完成配置',
       'cloudSuperResolutionFailed': '云端超分失败',
+      'cloudSrQueued': '云端超分排队中，前面还有 @count 张',
+      'cloudSrProcessing': '云端超分处理中',
       'superResolutionScale': '超分倍率',
       'confirm': '确定',
       'verityAppLinks4Android12': '验证应用链接（安卓12+）',

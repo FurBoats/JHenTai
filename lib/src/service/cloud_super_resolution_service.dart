@@ -12,7 +12,6 @@ import '../database/dao/super_resolution_info_dao.dart';
 import '../extension/get_logic_extension.dart';
 import '../model/gallery_image.dart';
 import '../setting/super_resolution_setting.dart';
-import '../utils/archive_util.dart';
 import '../utils/eh_executor.dart';
 import '../utils/toast_util.dart';
 import 'archive_download_service.dart';
@@ -221,41 +220,32 @@ class CloudSuperResolutionService extends GetxController with JHLifeCircleBeanEr
           );
         }
 
-        // 4. 轮询进度
-        await _pollUntilDone(gid, type, info, backendUrl, sessionId, uploads);
+        // 4. 逐张取结果：后端每完成一张就下载回来落盘、更新这张的状态，
+        //    AI(x/y) 进度实时往前走，不用等整批做完再打包。
+        Set<int> failed = await _streamResults(
+          backendUrl: backendUrl,
+          sessionId: sessionId,
+          aborted: () => _aborted(gid, type),
+          onStage: toastStageChange,
+          onFile: (index, bytes) async {
+            _UploadEntry entry = uploads[index];
+            File(join(outDir, entry.outName)).writeAsBytesSync(bytes, flush: true);
+            info.imageStatuses[entry.imageIndex] = SuperResolutionStatus.success;
+            await _persist(gid, info);
+            superResolutionService.updateSafely(
+              ['${SuperResolutionService.superResolutionId}::$gid', '${SuperResolutionService.superResolutionImageId}::$gid::${entry.imageIndex}'],
+            );
+          },
+        );
         if (_aborted(gid, type)) {
           return;
         }
-
-        // 5. 取结果包并解压到 super_resolution 目录
-        Response<List<int>> result = await _dio.get<List<int>>(
-          '$backendUrl/sr/result',
-          options: Options(headers: {'X-Session-Id': sessionId}, responseType: ResponseType.bytes, receiveTimeout: const Duration(minutes: 15)),
-        );
-        String zipPath = join(outDir, '.cloud_result.zip');
-        File(zipPath).writeAsBytesSync(result.data!);
-        bool extracted = await extractZipArchive(zipPath, outDir);
-        File(zipPath).deleteSync();
-        if (!extracted) {
-          throw Exception('extract result failed');
-        }
-        File errorsFile = File(join(outDir, '_errors.txt'));
-        if (errorsFile.existsSync()) {
-          errorsFile.deleteSync();
-        }
-
-        bool anyMissing = false;
-        for (final entry in uploads) {
-          if (File(join(outDir, entry.outName)).existsSync()) {
-            info.imageStatuses[entry.imageIndex] = SuperResolutionStatus.success;
-          } else {
-            info.imageStatuses[entry.imageIndex] = SuperResolutionStatus.paused;
-            anyMissing = true;
+        if (failed.isNotEmpty) {
+          for (int index in failed) {
+            info.imageStatuses[uploads[index].imageIndex] = SuperResolutionStatus.paused;
           }
-        }
-        await _persist(gid, info);
-        superResolutionService.updateSafely(['${SuperResolutionService.superResolutionId}::$gid']);
-        if (anyMissing) {
+          await _persist(gid, info);
+          superResolutionService.updateSafely(['${SuperResolutionService.superResolutionId}::$gid']);
           throw Exception('some images failed on the backend');
         }
       }
@@ -315,6 +305,8 @@ class CloudSuperResolutionService extends GetxController with JHLifeCircleBeanEr
       await _backendPost(backendUrl, '/sr/submit-archive', sessionId, data: {'url': archiveUrl, 'scale': scale});
       // 等后端收包 + 处理完成
       DateTime deadline = DateTime.now().add(const Duration(hours: 2));
+      String lastStage = '';
+      int lastAhead = -1;
       while (DateTime.now().isBefore(deadline)) {
         if (aborted()) {
           return false;
@@ -322,6 +314,12 @@ class CloudSuperResolutionService extends GetxController with JHLifeCircleBeanEr
         Response response = await _dio.get('$backendUrl/sr/status', options: Options(headers: {'X-Session-Id': sessionId}));
         Map<String, dynamic> data = Map<String, dynamic>.from(response.data as Map);
         String stage = data['stage'] as String? ?? '';
+        int ahead = (data['queuedAhead'] as num?)?.toInt() ?? 0;
+        if (stage != lastStage || ahead != lastAhead) {
+          toastStageChange(stage, ahead, (data['done'] as num?)?.toInt() ?? 0, (data['total'] as num?)?.toInt() ?? 0);
+          lastStage = stage;
+          lastAhead = ahead;
+        }
         if (stage == 'done') {
           break;
         }
@@ -355,14 +353,19 @@ class CloudSuperResolutionService extends GetxController with JHLifeCircleBeanEr
   // ---------------- 画廊下载时超分（图片链接交给后端抓取） ----------------
 
   /// 供 GalleryDownloadService 调用：把一批图片链接发给后端超分，
-  /// 成功返回结果 zip 的字节，失败/取消返回 null（调用方回退普通下载）。
-  Future<List<int>?> superResolveByUrls({
+  /// 后端每完成一张就通过 [onFile] 逐张回给调用方落盘（下标与 [urls] 一一对应），
+  /// 进度随每张图落地实时推进。返回的 [CloudSrUrlsOutcome] 说明整批结局：
+  /// 整体失败时调用方整批回退普通下载；aborted 时调用方什么都不用做；
+  /// 其余情况 failedIndexes 是后端失败/被拒的下标，调用方逐张回退即可。
+  Future<CloudSrUrlsOutcome> superResolveByUrlsStreaming({
     required List<String> urls,
     required int scale,
+    required Future<void> Function(int index, List<int> bytes) onFile,
     bool Function()? shouldAbort,
+    void Function(String stage, int queuedAhead, int done, int total)? onStage,
   }) async {
     if (!isReady || urls.isEmpty) {
-      return null;
+      return const CloudSrUrlsOutcome(totalFailure: true);
     }
     bool aborted() => shouldAbort?.call() ?? false;
     String? backendUrl;
@@ -372,7 +375,7 @@ class CloudSuperResolutionService extends GetxController with JHLifeCircleBeanEr
       backendUrl = dispatch['backendUrl'] as String;
       sessionId = dispatch['sessionId'] as String;
       if (aborted()) {
-        return null;
+        return const CloudSrUrlsOutcome(aborted: true);
       }
       Response submit = await _dio.post(
         '$backendUrl/sr/submit-urls',
@@ -382,36 +385,21 @@ class CloudSuperResolutionService extends GetxController with JHLifeCircleBeanEr
       Map<String, dynamic> submitData = Map<String, dynamic>.from(submit.data as Map);
       if (((submitData['accepted'] as num?)?.toInt() ?? 0) == 0) {
         log.error('cloud url SR: all urls rejected by backend');
-        return null;
+        return const CloudSrUrlsOutcome(totalFailure: true);
       }
-      DateTime deadline = DateTime.now().add(const Duration(hours: 2));
-      while (DateTime.now().isBefore(deadline)) {
-        if (aborted()) {
-          return null;
-        }
-        Response response = await _dio.get('$backendUrl/sr/status', options: Options(headers: {'X-Session-Id': sessionId}));
-        Map<String, dynamic> data = Map<String, dynamic>.from(response.data as Map);
-        String stage = data['stage'] as String? ?? '';
-        if (stage == 'done') {
-          break;
-        }
-        if (stage == 'error') {
-          log.error('cloud url SR backend error: ${data['error']}');
-          return null;
-        }
-        await Future.delayed(const Duration(seconds: 3));
-      }
-      if (DateTime.now().isAfter(deadline)) {
-        return null;
-      }
-      Response<List<int>> result = await _dio.get<List<int>>(
-        '$backendUrl/sr/result',
-        options: Options(headers: {'X-Session-Id': sessionId}, responseType: ResponseType.bytes, receiveTimeout: const Duration(minutes: 30)),
+      Set<int> failed = await _streamResults(
+        backendUrl: backendUrl,
+        sessionId: sessionId,
+        onFile: onFile,
+        aborted: aborted,
+        onStage: onStage,
       );
-      return result.data;
+      return CloudSrUrlsOutcome(failedIndexes: failed);
+    } on _CloudAborted {
+      return const CloudSrUrlsOutcome(aborted: true);
     } catch (e, s) {
-      log.error('superResolveByUrls failed', e, s);
-      return null;
+      log.error('superResolveByUrlsStreaming failed', e, s);
+      return aborted() ? const CloudSrUrlsOutcome(aborted: true) : const CloudSrUrlsOutcome(totalFailure: true);
     } finally {
       if (backendUrl != null && sessionId != null) {
         try {
@@ -455,41 +443,86 @@ class CloudSuperResolutionService extends GetxController with JHLifeCircleBeanEr
     return _dispatch(() => _aborted(gid, type));
   }
 
-  Future<void> _pollUntilDone(
-    int gid,
-    SuperResolutionType type,
-    SuperResolutionInfo info,
-    String backendUrl,
-    String sessionId,
-    List<_UploadEntry> uploads,
-  ) async {
+  /// 后端状态变化时给用户一个可见提示：排队（带前方张数）/ 开始处理。
+  /// 逐张落地本身会推进进度数字，这里只补等待阶段的可见性。
+  void toastStageChange(String stage, int queuedAhead, int done, int total) {
+    if (stage == 'queued') {
+      toast('cloudSrQueued'.trParams({'count': '$queuedAhead'}));
+    } else if (stage == 'processing') {
+      toast('cloudSrProcessing'.tr);
+    }
+  }
+
+  /// 轮询后端状态，后端每完成一张就立刻通过 [onFile] 把这张的结果交给调用方；
+  /// stage 变为 done 后返回后端失败（含提交时被拒）的下标集合。
+  /// 取文件本身失败（网络抖动）下一轮重试；[onFile] 抛错则那张记失败、不拖累其余。
+  /// 用户中止时抛 [_CloudAborted]，后端 error / 超时抛普通异常。
+  Future<Set<int>> _streamResults({
+    required String backendUrl,
+    required String sessionId,
+    required Future<void> Function(int index, List<int> bytes) onFile,
+    required bool Function() aborted,
+    void Function(String stage, int queuedAhead, int done, int total)? onStage,
+  }) async {
+    final Set<int> fetched = {};
+    final Set<int> failed = {};
+    String lastStage = '';
+    int lastAhead = -1;
     DateTime deadline = DateTime.now().add(const Duration(hours: 2));
     while (DateTime.now().isBefore(deadline)) {
-      if (_aborted(gid, type)) {
+      if (aborted()) {
         throw const _CloudAborted();
       }
       Response response = await _dio.get('$backendUrl/sr/status', options: Options(headers: {'X-Session-Id': sessionId}));
       Map<String, dynamic> data = Map<String, dynamic>.from(response.data as Map);
-      int done = (data['done'] as num?)?.toInt() ?? 0;
-      bool changed = false;
-      for (int k = 0; k < uploads.length && k < done; k++) {
-        int imageIndex = uploads[k].imageIndex;
-        if (info.imageStatuses[imageIndex] != SuperResolutionStatus.success) {
-          info.imageStatuses[imageIndex] = SuperResolutionStatus.success;
-          superResolutionService.updateSafely(['${SuperResolutionService.superResolutionImageId}::$gid::$imageIndex']);
-          changed = true;
-        }
-      }
-      if (changed) {
-        await _persist(gid, info);
-        superResolutionService.updateSafely(['${SuperResolutionService.superResolutionId}::$gid']);
-      }
       String stage = data['stage'] as String? ?? '';
-      if (stage == 'done') {
-        return;
+      int ahead = (data['queuedAhead'] as num?)?.toInt() ?? 0;
+      int done = (data['done'] as num?)?.toInt() ?? 0;
+      int total = (data['total'] as num?)?.toInt() ?? 0;
+      if (onStage != null && (stage != lastStage || ahead != lastAhead)) {
+        onStage(stage, ahead, done, total);
+        lastStage = stage;
+        lastAhead = ahead;
       }
       if (stage == 'error') {
         throw Exception('backend error: ${data['error']}');
+      }
+      for (final raw in (data['doneItems'] as List? ?? const [])) {
+        int idx = ((raw as Map)['index'] as num).toInt();
+        if (fetched.contains(idx) || failed.contains(idx)) {
+          continue;
+        }
+        List<int> bytes;
+        try {
+          Response<List<int>> fileResp = await _dio.get<List<int>>(
+            '$backendUrl/sr/file/$idx',
+            options: Options(headers: {'X-Session-Id': sessionId}, responseType: ResponseType.bytes, receiveTimeout: const Duration(minutes: 10)),
+          );
+          bytes = fileResp.data!;
+        } catch (_) {
+          continue; // 取文件失败下一轮再试，不记失败
+        }
+        fetched.add(idx);
+        try {
+          await onFile(idx, bytes);
+        } catch (e) {
+          log.error('cloud SR onFile failed, index:$idx', e);
+          failed.add(idx);
+        }
+        if (aborted()) {
+          throw const _CloudAborted();
+        }
+      }
+      if (stage == 'done') {
+        for (final raw in (data['failedItems'] as List? ?? const [])) {
+          failed.add(((raw as Map)['index'] as num).toInt());
+        }
+        for (int i = 0; i < total; i++) {
+          if (!fetched.contains(i)) {
+            failed.add(i);
+          }
+        }
+        return failed;
       }
       await Future.delayed(const Duration(seconds: 3));
     }
@@ -527,6 +560,15 @@ class _UploadEntry {
 
 class _CloudAborted implements Exception {
   const _CloudAborted();
+}
+
+/// 画廊链接流整批的结局（见 superResolveByUrlsStreaming）
+class CloudSrUrlsOutcome {
+  final bool totalFailure;
+  final bool aborted;
+  final Set<int> failedIndexes;
+
+  const CloudSrUrlsOutcome({this.totalFailure = false, this.aborted = false, this.failedIndexes = const {}});
 }
 
 /// 云端超分倍率选择（2x / 3x / 4x，后端固定 Real-ESRGAN-Anime 先 4x 再缩放）

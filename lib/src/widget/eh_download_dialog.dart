@@ -103,18 +103,25 @@ class _EHDownloadDialogState extends State<EHDownloadDialog> {
   }
 
   Widget _buildCloudSrRow() {
+    // 标签+勾选一行、倍率选择单独一行：全挤在一行会超出对话框宽度被裁掉
     return SizedBox(
       width: UIConfig.downloadDialogWidth,
-      child: Row(
+      child: Column(
         mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.end,
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Text('cloudSuperResolve'.tr + ' ?', style: const TextStyle(fontSize: UIConfig.groupDialogCheckBoxTextSize)),
-          Checkbox(
-            value: cloudSr,
-            activeColor: UIConfig.groupDialogCheckBoxColor(context),
-            onChanged: (bool? value) => setState(() => cloudSr = value ?? false),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text('cloudSuperResolve'.tr + ' ?', style: const TextStyle(fontSize: UIConfig.groupDialogCheckBoxTextSize)),
+              Checkbox(
+                value: cloudSr,
+                activeColor: UIConfig.groupDialogCheckBoxColor(context),
+                onChanged: (bool? value) => setState(() => cloudSr = value ?? false),
+              ),
+            ],
           ),
           if (cloudSr)
             SegmentedButton<int>(
@@ -130,7 +137,7 @@ class _EHDownloadDialogState extends State<EHDownloadDialog> {
               ],
               selected: {cloudScale},
               onSelectionChanged: (Set<int> selection) => setState(() => cloudScale = selection.first),
-            ),
+            ).marginOnly(top: 8),
         ],
       ),
     );

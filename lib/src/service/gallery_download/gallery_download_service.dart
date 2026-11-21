@@ -31,7 +31,6 @@ import 'package:jhentai/src/model/jh_response/jh_response.dart';
 import 'package:jhentai/src/network/jh_request.dart';
 import 'package:jhentai/src/service/local_config_service.dart';
 import 'package:jhentai/src/service/log.dart';
-import 'package:archive/archive.dart';
 import 'package:jhentai/src/service/cloud_super_resolution_service.dart';
 import 'package:jhentai/src/service/super_resolution_service.dart';
 import 'package:jhentai/src/setting/download_setting.dart';
@@ -1207,65 +1206,63 @@ class GalleryDownloadService extends GetxController with GridBasePageServiceMixi
     batch.debounce?.cancel();
     Map<int, _CloudSrPending> entries = Map<int, _CloudSrPending>.from(batch.pending);
     batch.pending.clear();
+    // 提交顺序即下标顺序，后端按下标逐张回结果，对位回填、逐张推进度
+    List<MapEntry<int, _CloudSrPending>> ordered = entries.entries.toList();
     try {
-      List<int>? zipBytes = await cloudSuperResolutionService.superResolveByUrls(
-        urls: entries.values.map((e) => e.downloadUrl).toList(),
+      CloudSrUrlsOutcome outcome = await cloudSuperResolutionService.superResolveByUrlsStreaming(
+        urls: ordered.map((e) => e.value.downloadUrl).toList(),
         scale: batch.scale,
         shouldAbort: () => _taskHasBeenPausedOrRemoved(gallery),
-      );
-
-      Map<String, List<int>> files = {};
-      if (zipBytes != null) {
-        Archive archive = ZipDecoder().decodeBytes(zipBytes);
-        for (ArchiveFile file in archive.files) {
-          if (file.isFile) {
-            files[file.name] = file.content as List<int>;
-          }
-        }
-      }
-
-      for (MapEntry<int, _CloudSrPending> entry in entries.entries) {
-        int serialNo = entry.key;
-        _CloudSrPending pending = entry.value;
-        try {
-          if (_taskHasBeenPausedOrRemoved(gallery)) {
-            continue;
-          }
-          String fileName = path.basename(Uri.parse(pending.downloadUrl).path);
-          List<int>? bytes = files[fileName];
-          bool ok = false;
-          if (bytes != null) {
-            String imagePath = DownloadPathResolver.computeImageDownloadAbsolutePath(gallery.toGalleryDownloadedData(), pending.downloadUrl, serialNo);
-            await io.File(imagePath).writeAsBytes(bytes, flush: true);
-            ok = true;
-          } else {
-            // 云端没产出这张（链接被拒/单图失败）→ 回退普通下载
-            ok = await _downloadImageDirectly(gallery, pending.downloadUrl, serialNo);
-          }
-          if (ok && !_taskHasBeenPausedOrRemoved(gallery)) {
+        onStage: (stage, ahead, done, total) => cloudSuperResolutionService.toastStageChange(stage, ahead, done, total),
+        onFile: (index, bytes) async {
+          MapEntry<int, _CloudSrPending> entry = ordered[index];
+          int serialNo = entry.key;
+          _CloudSrPending pending = entry.value;
+          String imagePath = DownloadPathResolver.computeImageDownloadAbsolutePath(gallery.toGalleryDownloadedData(), pending.downloadUrl, serialNo);
+          await io.File(imagePath).writeAsBytes(bytes, flush: true);
+          if (!_taskHasBeenPausedOrRemoved(gallery)) {
             await _updateImageStatus(gallery, pending.image, serialNo, DownloadStatus.downloaded);
             await _updateProgressAfterImageDownloaded(gallery, serialNo);
           }
-        } finally {
-          pending.completer.complete();
+          if (!pending.completer.isCompleted) {
+            pending.completer.complete();
+          }
+        },
+      );
+
+      if (!outcome.aborted) {
+        // 没从云端拿到结果的下标（整体失败 / 后端失败或被拒）→ 逐张回退普通下载
+        for (MapEntry<int, _CloudSrPending> entry in ordered) {
+          _CloudSrPending pending = entry.value;
+          if (pending.completer.isCompleted) {
+            continue;
+          }
+          try {
+            if (_taskHasBeenPausedOrRemoved(gallery)) {
+              continue;
+            }
+            bool ok = await _downloadImageDirectly(gallery, pending.downloadUrl, entry.key);
+            if (ok && !_taskHasBeenPausedOrRemoved(gallery)) {
+              await _updateImageStatus(gallery, pending.image, entry.key, DownloadStatus.downloaded);
+              await _updateProgressAfterImageDownloaded(gallery, entry.key);
+            }
+          } catch (_) {
+            // 单张回退失败不拖累整批，图片保持 downloading 态等待恢复
+          } finally {
+            if (!pending.completer.isCompleted) {
+              pending.completer.complete();
+            }
+          }
         }
       }
     } catch (e, s) {
-      log.error('Cloud SR batch failed, gid:${gallery.gid}, fallback to normal download', e, s);
-      for (MapEntry<int, _CloudSrPending> entry in entries.entries) {
-        try {
-          bool ok = await _downloadImageDirectly(gallery, entry.value.downloadUrl, entry.key);
-          if (ok && !_taskHasBeenPausedOrRemoved(gallery)) {
-            await _updateImageStatus(gallery, entry.value.image, entry.key, DownloadStatus.downloaded);
-            await _updateProgressAfterImageDownloaded(gallery, entry.key);
-          }
-        } catch (_) {
-          // 单张回退失败不拖累整批，图片保持 downloading 态等待恢复
-        } finally {
+      log.error('Cloud SR batch failed, gid:${gallery.gid}', e, s);
+    } finally {
+      for (MapEntry<int, _CloudSrPending> entry in ordered) {
+        if (!entry.value.completer.isCompleted) {
           entry.value.completer.complete();
         }
       }
-    } finally {
       batch.running = false;
       if (batch.pending.isNotEmpty) {
         _runCloudSrBatch(gallery);

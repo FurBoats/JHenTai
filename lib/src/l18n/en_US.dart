@@ -482,6 +482,8 @@ class en_US {
       'cloudNotSet': 'Not set',
       'cloudNotConfigured': 'Cloud super resolution is not fully configured. Please finish the setup in Advanced Settings first.',
       'cloudSuperResolutionFailed': 'Cloud super resolution failed',
+      'cloudSrQueued': 'Cloud super resolution queued, @count image(s) ahead',
+      'cloudSrProcessing': 'Cloud super resolution processing',
       'superResolutionScale': 'Super Resolution Scale',
       'confirm': 'Confirm',
       'verityAppLinks4Android12': 'Verity App Links(Android 12+)',

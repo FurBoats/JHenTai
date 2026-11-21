@@ -143,13 +143,19 @@ class _EHArchiveDialogState extends State<EHArchiveDialog> {
   }
 
   Widget _buildCloudSrOption() {
-    return Row(
+    // 开关一行、倍率选择单独一行，避免一行塞满超出对话框宽度
+    return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text('cloudSuperResolve'.tr),
-        Switch(
-          value: cloudSr,
-          onChanged: (bool value) => setState(() => cloudSr = value),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('cloudSuperResolve'.tr),
+            Switch(
+              value: cloudSr,
+              onChanged: (bool value) => setState(() => cloudSr = value),
+            ),
+          ],
         ),
         if (cloudSr)
           SegmentedButton<int>(
@@ -165,7 +171,7 @@ class _EHArchiveDialogState extends State<EHArchiveDialog> {
             ],
             selected: {cloudScale},
             onSelectionChanged: (Set<int> selection) => setState(() => cloudScale = selection.first),
-          ),
+          ).marginOnly(top: 8),
       ],
     );
   }
